@@ -1,0 +1,2242 @@
+SAAI – Documentación Oficial de Backend
+Documento consolidado (TRABAJADOR + ADMIN + SAAI).
+
+1. Convenciones del backend (oficial)
+
+1.1 Autenticación y Authorizer
+- Todas las rutas privadas requieren JWT en Authorization: Bearer <token>.
+- La validación del JWT se realiza con Authorizer en API Gateway.
+- /login es público; el resto de rutas son protegidas por el Authorizer.
+
+1.2 Multi-tenant (aislamiento por tienda)
+- Todo dato operativo de tienda se aisla por tenant_id (codigo_tienda).
+- El tenant_id se obtiene del JWT (claims) y el backend lo aplica en cada operación.
+
+1.3 DynamoDB (modelo estándar de ítems)
+- Se guarda con el patrón: tenant_id + entity_id + data.
+  • tenant_id: codigo_tienda
+  • entity_id: identificador/código de la entidad
+  • data: JSON completo de la entidad (toda la información)
+- El backend usa UUID de forma interna cuando corresponde; el frontend opera con “códigos” (T002P001, T002V015, etc.).
+1.4 Estado y eliminación lógica (soft delete)
+•	Todos los endpoints de eliminación (DELETE) se implementan como eliminación lógica (soft delete).
+•	Para las entidades internas (productos, usuarios, gastos, notificaciones, etc.), el soft delete se maneja mediante:
+o	estado = INACTIVO
+o	Metadatos de baja dentro del objeto (motivo_baja, fecha_baja, baja_por, si aplica).
+•	Los registros en estado INACTIVO no se eliminan físicamente y no participan en operaciones normales del sistema, pero se conservan para trazabilidad e historial.
+Estados de Tienda (t_tiendas)
+•	Las tiendas (tenants) manejan un conjunto de estados propios y diferenciados, ya que su estado impacta a todo el sistema:
+o	ACTIVA: la tienda se encuentra operativa y puede usar todas las funcionalidades.
+o	SUSPENDIDA: la tienda existe, sus datos se conservan, pero no puede operar (por ejemplo, por falta de pago o pausa temporal). Puede reactivarse.
+o	ELIMINADA: la tienda ha sido dada de baja de forma lógica y no puede volver a activarse.
+•	La purga definitiva de datos (hard delete) se aplica únicamente cuando una tienda es eliminada de forma permanente, bajo una política administrativa definida.
+Esta purga elimina todos los datos asociados al tenant_id en DynamoDB, S3 y demás recursos relacionados.
+Nota importante
+•	Los estados de tienda (ACTIVA, SUSPENDIDA, ELIMINADA) no se usan para entidades internas.
+•	Los estados operativos (ACTIVO, INACTIVO) no se usan para tiendas.
+•	Esta separación permite:
+o	Control claro de acceso global al sistema.
+o	Eliminación lógica segura a nivel de entidad.
+o	Retención de datos y posible reactivación de tiendas sin pérdida de información.
+
+1.5 Fecha/Hora Perú
+- La fecha/hora oficial la define el backend (America/Lima, UTC-05:00).
+- El frontend no envía fecha/hora para operaciones sensibles; el backend decide y persiste timestamps.
+
+1.6 Paginación (listados GET)
+- Los endpoints de listado soportan paginación vía querystring:
+  • limit
+  • next_token
+- Si no se envían, se usan valores por defecto.
+- La respuesta retorna next_token cuando existan más resultados.
+Cuando haces ListarProductos (o cualquier listado), DynamoDB te devuelve hasta cierto límite de items.
+Si existen más, DynamoDB te devuelve un puntero llamado LastEvaluatedKey.
+Tú conviertes ese puntero en un next_token y se lo mandas al frontend.
+Luego, el frontend vuelve a llamar:
+GET /productos?limit=10&next_token=<token>
+y el backend usa ese token para continuar desde donde se quedó, sin repetir ni saltarse items.
+1.7 SNS y AlertasSAAI
+- Las alertas del sistema se publican al topic SNS: AlertasSAAI.
+- GuardarNotificacion (SNS → Lambda) consume AlertasSAAI y guarda en t_notificaciones.
+- Opcionalmente se agrega un consumidor Email con filtros (severidad/tipo/tenant_id).
+
+1.8 Trazabilidad por usuario (auditoría operativa)
+- Toda operación sensible del sistema (por ejemplo: registrar ventas, crear gastos,
+  actualizar productos o analítica) registra el codigo_usuario que ejecutó la acción.
+- El codigo_usuario se obtiene exclusivamente desde el JWT validado por el Authorizer
+  (claims); el frontend no envía ni controla este valor.
+- Esta información se persiste dentro del campo data de la entidad correspondiente
+  (por ejemplo: t_ventas, t_gastos), permitiendo trazabilidad, auditoría y métricas
+  por usuario en el futuro.
+2. Arquitectura TRABAJADOR
+
+2.1 Endpoints (Request/Response)
+SAAI – BACKEND TRABAJADOR
+LAMBDAS + MÉTODOS + REQUEST & RESPONSE (CON CÓDIGOS)
+==================================================
+
+NOTA CLAVE
+----------
+- UUID = uso interno backend (DynamoDB, relaciones internas)
+- CÓDIGO = uso frontend / búsquedas / UX
+- El frontend NUNCA necesita UUID
+- El TOTAL se calcula en backend
+- CalcularMonto NO guarda, NO descuenta stock
+
+FORMATO GENERAL
+---------------
+Request:
+{
+  "body": { ... }
+}
+
+Response OK:
+{
+  "success": true,
+  "message": "string",
+  "data": { ... }
+}
+
+------------------------------------
+AUTH
+------------------------------------
+
+Lambda: LoginUsuario
+Método: POST
+Path: /login
+
+Request:
+{
+  "body": {
+    "email": "worker@tienda.com",
+    "password": "123456"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Login exitoso",
+  "data": {
+    "token": "jwt_token",
+    "user": {
+      "codigo_usuario": "U0001",
+      "nombre": "Empleado Caja",
+      "role": "worker",
+      "codigo_tienda": "T002"
+    },
+    "expires": 1731100000
+  }
+}
+
+------------------------------------
+PRODUCTOS
+------------------------------------
+
+Lambda: CrearProducto
+Método: POST
+Path: /productos
+
+Request:
+{
+  "body": {
+    "nombre": "Coca Cola 500ml",
+    "precio": 3.5,
+    "stock": 20,
+    "categoria": "bebidas",
+    "descripcion": "Botella 500ml"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Producto creado",
+  "data": {
+    "codigo_producto": "T002P001"
+  }
+}
+
+------------------------------------
+
+Lambda: ListarProductos
+Método: GET
+Path: /productos
+
+Request:
+{
+  "body": {}
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "productos": [
+      {
+        "codigo_producto": "T002P001",
+        "nombre": "Coca Cola 500ml",
+        "precio": 3.5,
+        "stock": 12,
+        "categoria": "bebidas"
+      }
+    ]
+  }
+}
+
+------------------------------------
+
+Lambda: BuscarProductos
+Método: POST
+Path: /productos/buscar
+
+EJEMPLO 1 – Buscar por código:
+Request:
+{
+  "body": {
+    "codigo_producto": "T002P001"
+  }
+}
+
+EJEMPLO 2 – Buscar por nombre:
+Request:
+{
+  "body": {
+    "query": "coca"
+  }
+}
+
+EJEMPLO 3 – Buscar por categoría:
+Request:
+{
+  "body": {
+    "categoria": "bebidas"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "productos": [
+      {
+        "codigo_producto": "T002P001",
+        "nombre": "Coca Cola 500ml",
+        "precio": 3.5,
+        "stock": 12,
+        "categoria": "bebidas"
+      }
+    ]
+  }
+}
+
+------------------------------------
+
+Lambda: ActualizarProducto
+Método: PUT
+Path: /productos/{codigo_producto}
+
+Request:
+{
+  "body": {
+    "precio": 3.8,
+    "stock": 15,
+    "categoria": "bebidas"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Producto actualizado",
+  "data": {
+    "codigo_producto": "T002P001"
+  }
+}
+
+------------------------------------
+
+Lambda: EliminarProducto
+Método: DELETE
+Path: /productos/{codigo_producto}
+
+Request:
+{
+  "body": {
+    "motivo": "Producto descontinuado"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Producto eliminado",
+  "data": {
+    "codigo_producto": "T002P001"
+  }
+}
+
+------------------------------------
+VENTAS
+------------------------------------
+
+Lambda: CalcularMonto
+Método: POST
+Path: /ventas/calcular
+
+Request:
+{
+  "body": {
+    "productos": [
+      {
+        "codigo_producto": "T002P001",
+        "cantidad": 2
+      }
+    ]
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Monto calculado",
+  "data": {
+    "items": [
+      {
+        "codigo_producto": "T002P001",
+        "nombre": "Coca Cola 500ml",
+        "cantidad": 2,
+        "precio_unitario": 3.5,
+        "subtotal": 7.0
+      }
+    ],
+    "total": 7.0
+  }
+}
+
+------------------------------------
+
+Lambda: RegistrarVenta
+Método: POST
+Path: /ventas
+
+Request:
+{
+  "body": {
+    "productos": [
+      {
+        "codigo_producto": "T002P001",
+        "cantidad": 2
+      }
+    ],
+    "metodo_pago": "efectivo"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Venta registrada",
+  "data": {
+    "codigo_venta": "T002V015",
+    "total": 7.0,
+    "fecha": "2025-11-08T15:30:00-05:00"
+  }
+}
+
+------------------------------------
+
+Lambda: ListarVentas
+Método: GET
+Path: /ventas
+
+Request:
+{
+  "body": {}
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "ventas": [
+      {
+        "codigo_venta": "T002V015",
+        "total": 7.0,
+        "fecha": "2025-11-08T15:30:00-05:00"
+      }
+    ]
+   "next_token": "..."
+  }
+}
+
+------------------------------------
+
+Lambda: BuscarVenta
+Método: POST
+Path: /ventas/buscar
+
+EJEMPLO 1 – Buscar por código:
+Request:
+{
+  "body": {
+    "codigo_venta": "T002V015"
+  }
+}
+
+EJEMPLO 2 – Buscar por fecha:
+Request:
+{
+  "body": {
+    "fecha": "2025-11-08"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "codigo_venta": "T002V015",
+    "total": 7.0,
+    "fecha": "2025-11-08T15:30:00-05:00",
+    "productos": [
+      {
+        "codigo_producto": "T002P001",
+        "nombre": "Coca Cola 500ml",
+        "cantidad": 2,
+        "precio_unitario": 3.5
+      }
+    ]
+  }
+}
+
+------------------------------------
+NOTIFICACIONES
+------------------------------------
+
+Lambda: ListarNotificaciones
+Método: GET
+Path: /notificacion
+
+Request:
+{
+  "body": {}
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "notificaciones": [
+      {
+        "codigo_notificacion": "N001",
+        "tipo": "bajoStock",
+        "titulo": "Stock bajo",
+        "mensaje": "Coca Cola tiene solo 3 unidades",
+        "fecha": "2025-11-08T15:31:00-05:00"
+      }
+    ]
+  }
+}
+
+==================================================
+FIN
+==================================================
+
+2.2 Lambdas (qué hace cada una, tablas y servicios)
+SAAI – BACKEND TRABAJADOR
+DOCUMENTACIÓN DE LAMBDAS
+========================
+
+CONTEXTO GENERAL
+----------------
+Esta arquitectura corresponde al rol TRABAJADOR.
+Cada trabajador pertenece a una sola tienda.
+
+Autenticación:
+- Token JWT
+- Tabla: t_tokens_trabajadores
+
+Todas las rutas (excepto /login) pasan por:
+API Gateway → Authorizer → Lambda
+
+====================================
+AUTH
+====================================
+
+Lambda: LoginUsuario
+Ruta: POST /login
+
+Descripción:
+Autentica al trabajador y genera un JWT.
+
+Tablas:
+- t_usuarios
+- t_tokens_trabajadores
+
+SNS:
+- No
+
+====================================
+PRODUCTOS
+====================================
+
+Lambda: CrearProducto
+Ruta: POST /productos
+
+Descripción:
+Registra un nuevo producto en la tienda.
+
+Tablas:
+- t_productos
+- t_counters
+
+SNS:
+- No
+
+--------------------
+
+Lambda: ListarProductos
+Ruta: GET /productos
+
+Descripción:
+Lista todos los productos de la tienda.
+
+Tablas:
+- t_productos
+
+SNS:
+- No
+
+--------------------
+
+Lambda: BuscarProductos
+Ruta: POST /productos/buscar
+
+Descripción:
+Busca productos por nombre, código o categoría.
+
+Tablas:
+- t_productos
+
+SNS:
+- No
+
+--------------------
+
+Lambda: ActualizarProducto
+Ruta: PUT /productos/{codigo_producto}
+
+Descripción:
+Actualiza información de un producto.
+
+Tablas:
+- t_productos
+
+SNS:
+- No
+
+--------------------
+
+Lambda: EliminarProducto
+Ruta: DELETE /productos/{codigo_producto}
+
+Descripción:
+Elimina (lógicamente) un producto.
+
+Tablas:
+- t_productos
+
+SNS:
+- No
+
+====================================
+VENTAS
+====================================
+
+Lambda: CalcularMonto
+Ruta: POST /ventas/calcular
+
+Descripción:
+Calcula el total de una venta sin registrarla.
+
+Tablas:
+- t_productos
+
+SNS:
+- No
+
+--------------------
+
+Lambda: RegistrarVenta
+Ruta: POST /ventas
+
+Descripción:
+Registra una venta y descuenta stock.
+
+Tablas:
+- t_ventas
+- t_productos
+- t_counters
+
+SNS:
+- Publica evento en AlertasSAAI
+- Invoca EmitirEventosWs con evento venta_registrada
+--------------------
+
+Lambda: ListarVentas
+Ruta: GET /ventas
+
+Descripción:
+Lista las ventas de la tienda.
+
+Tablas:
+- t_ventas
+
+SNS:
+- No
+
+--------------------
+
+Lambda: BuscarVenta
+Ruta: POST /ventas/buscar
+
+Descripción:
+Busca ventas por código o fecha.
+
+Tablas:
+- t_ventas
+
+SNS:
+- No
+
+====================================
+NOTIFICACIONES
+====================================
+
+Lambda: GuardarNotificacion
+Ruta: Interna (SNS → Lambda)
+
+Descripción:
+Guarda una notificación generada por alertas.
+
+Tablas:
+- t_notificaciones
+
+SNS:
+- Consumidor de AlertasSAAI
+
+--------------------
+
+Lambda: ListarNotificaciones
+Ruta: GET /notificacion
+
+Descripción:
+Lista notificaciones del trabajador.
+
+Tablas:
+- t_notificaciones
+
+SNS:
+- No
+
+3. Arquitectura ADMINISTRADOR
+
+3.1 Endpoints (Request/Response)
+SAAI – BACKEND ADMIN
+LAMBDAS + MÉTODOS + REQUEST & RESPONSE
+====================================
+
+NOTAS GENERALES
+---------------
+- UUID: uso interno (DynamoDB, relaciones)
+- Códigos: uso frontend (busquedas, UX)
+- Reportes: bajo demanda (NO automáticos)
+- SageMaker: solo predicción de demanda
+- SNS: usado en Analítica (AlertasSAAI)
+
+FORMATO GENERAL
+---------------
+Request:
+{
+  "body": { ... }
+}
+
+Response:
+{
+  "success": true,
+  "message": "string",
+  "data": { ... }
+}
+
+==================================================
+AUTH
+==================================================
+
+Lambda: LoginUsuario
+Método: POST
+Path: /login
+
+Request:
+{
+  "body": {
+    "email": "admin@tienda.com",
+    "password": "123456"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Login exitoso",
+  "data": {
+    "token": "jwt_token",
+    "user": {
+      "codigo_usuario": "A001",
+      "nombre": "Administrador",
+      "role": "admin",
+      "codigo_tienda": "T002"
+    },
+    "expires": 1731100000
+  }
+}
+
+==================================================
+USUARIOS (ADMIN)
+==================================================
+
+Lambda: CrearUsuario
+Método: POST
+Path: /usuarios
+
+Request:
+{
+  "body": {
+    "nombre": "Juan Perez",
+    "email": "juan@tienda.com",
+    "password": "123456",
+    "role": "worker"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Usuario creado",
+  "data": {
+    "codigo_usuario": "U002"
+  }
+}
+
+------------------------------------
+
+Lambda: ListarUsuarios
+Método: GET
+Path: /usuarios
+
+Request:
+{
+  "body": {}
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "usuarios": [
+      {
+        "codigo_usuario": "U002",
+        "nombre": "Juan Perez",
+        "email": "juan@tienda.com",
+        "role": "worker"
+      }
+    ]
+  "next_token": "..."
+  }
+}
+
+------------------------------------
+
+Lambda: BuscarUsuario
+Método: POST
+Path: /usuarios/buscar
+
+Request:
+{
+  "body": {
+    "query": "juan"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "usuarios": [
+      {
+        "codigo_usuario": "U002",
+        "nombre": "Juan Perez",
+        "email": "juan@tienda.com",
+        "role": "worker"
+      }
+    ]
+  }
+}
+
+------------------------------------
+
+Lambda: ActualizarUsuario
+Método: PUT
+Path: /usuarios/{codigo_usuario}
+
+Request:
+{
+  "body": {
+    "nombre": "Juan P.",
+    "role": "worker"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Usuario actualizado",
+  "data": {
+    "codigo_usuario": "U002"
+  }
+}
+
+------------------------------------
+
+Lambda: EliminarUsuario
+Método: DELETE
+Path: /usuarios/{codigo_usuario}
+
+Request:
+{
+  "body": {
+    "motivo": "Usuario ya no trabaja"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Usuario eliminado",
+  "data": {
+    "codigo_usuario": "U002"
+  }
+}
+
+==================================================
+GASTOS
+==================================================
+
+Lambda: CrearGasto
+Método: POST
+Path: /gastos
+
+Request:
+{
+  "body": {
+    "descripcion": "Pago proveedor",
+    "monto": 150.0,
+    "categoria": "proveedores",
+    "fecha": "2025-11-08"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Gasto registrado",
+  "data": {
+    "codigo_gasto": "G001"
+  }
+}
+
+------------------------------------
+
+Lambda: ListarGastos
+Método: GET
+Path: /gastos
+
+Request:
+{
+  "body": {}
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "gastos": [
+      {
+        "codigo_gasto": "G001",
+        "descripcion": "Pago proveedor",
+        "monto": 150.0,
+        "fecha": "2025-11-08"
+      }
+    ]
+  }
+}
+
+------------------------------------
+
+Lambda: BuscarGasto
+Método: POST
+Path: /gastos/buscar
+
+Request:
+{
+  "body": {
+    "categoria": "proveedores"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "gastos": [
+      {
+        "codigo_gasto": "G001",
+        "descripcion": "Pago proveedor",
+        "monto": 150.0,
+        "fecha": "2025-11-08"
+      }
+    ]
+  }
+}
+
+------------------------------------
+
+Lambda: ActualizarGasto
+Método: PUT
+Path: /gastos/{codigo_gasto}
+
+Request:
+{
+  "body": {
+    "monto": 160.0,
+    "descripcion": "Pago proveedor actualizado"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Gasto actualizado",
+  "data": {
+    "codigo_gasto": "G001"
+  }
+}
+
+------------------------------------
+
+Lambda: EliminarGasto
+Método: DELETE
+Path: /gastos/{codigo_gasto}
+
+Request:
+{
+  "body": {
+    "motivo": "Error de registro"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Gasto eliminado",
+  "data": {
+    "codigo_gasto": "G001"
+  }
+}
+
+==================================================
+ANALÍTICA Y ALERTAS
+==================================================
+
+Lambda: ActualizarAnalitica
+Método: POST
+Path: /analitica
+
+Request:
+{
+  "body": {
+    "fecha": "2025-11-08"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Analítica actualizada"
+}
+
+(Internamente dispara SNS: AlertasSAAI → GuardarNotificacion)
+
+------------------------------------
+
+Lambda: VerAnalitica
+Método: GET
+Path: /analitica
+
+Request:
+{
+  "query": {
+    "periodo": "7"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "periodo": {
+      "fecha_inicio": "2025-11-01",
+      "fecha_fin": "2025-11-08",
+      "dias": 7
+    },
+    "ventas": {
+      "total_ventas": 42,
+      "total_ingresos": 1520.50,
+      "promedio_diario": 6.0
+    },
+    "gastos": {
+      "total_gastos": 18,
+      "total_egresos": 730.00,
+      "balance": 790.50
+    },
+    "inventario": {
+      "total_productos": 35,
+      "productos_sin_stock": 2,
+      "productos_bajo_stock": 5,
+      "valor_total": 4200.00
+    },
+    "usuarios": {
+      "administradores": 1,
+      "trabajadores": 3
+    },
+    "productos_top": [
+      {
+        "codigo_producto": "T002P001",
+        "nombre": "Coca Cola",
+        "cantidad_vendida": 18
+      },
+      {
+        "codigo_producto": "T002P004",
+        "nombre": "Inca Kola",
+        "cantidad_vendida": 14
+      }
+    ],
+    "ventas_diarias": [
+      {
+        "fecha": "2025-11-06",
+        "cantidad": 5,
+        "ingresos": 180.00
+      },
+      {
+        "fecha": "2025-11-07",
+        "cantidad": 7,
+        "ingresos": 260.00
+      }
+    ],
+    "alertas_detectadas": [
+      {
+        "tipo": "productoTopSinStock",
+        "severidad": "INFO",
+        "mensaje": "Producto más vendido sin stock"
+      }
+    ]
+  }
+}
+
+
+==================================================
+REPORTES
+==================================================
+
+Lambda: GenerarReporteInventario
+Método: POST
+Path: /reportes/inventario
+
+Request:
+{
+  "body": {}
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "codigo_reporte": "R001",
+    "download_url": "https://s3.amazonaws.com/.../inventario.xlsx"
+  }
+}
+
+------------------------------------
+
+Lambda: GenerarReporteVentas
+Método: POST
+Path: /reportes/ventas
+
+Lambda: GenerarReporteGastos
+Método: POST
+Path: /reportes/gastos
+
+Lambda: GenerarReporteGeneral
+Método: POST
+Path: /reportes/general
+
+(Mismo formato de request/response que inventario)
+
+------------------------------------
+
+Lambda: ListarHistorialReportes
+Método: GET
+Path: /reportes/historial
+
+Request:
+{
+  "body": {}
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "reportes": [
+      {
+        "codigo_reporte": "R001",
+        "tipo": "ventas",
+        "fecha": "2025-11-08",
+        "download_url": "https://s3.amazonaws.com/.../ventas.xlsx"
+      }
+    ]
+   "next_token": "..."
+  }
+}
+
+==================================================
+PREDICCIONES (ML)
+==================================================
+
+Lambda: PrediccionDemanda
+Método: POST
+Path: /predicciones
+
+Request:
+{
+  "body": {
+    "codigo_producto": "T002P001"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "codigo_producto": "T002P001",
+    "demanda_manana": 5,
+    "demanda_proxima_semana": 35
+  }
+}
+
+==================================================
+FIN
+==================================================
+
+3.2 Lambdas (qué hace cada una, tablas y servicios)
+SAAI – BACKEND ADMIN (DOCUMENTO DE LAMBDAS)
+===========================================
+
+====================================
+AUTH (ADMIN)
+====================================
+
+Lambda: LoginUsuario
+Ruta: POST /login
+
+Descripción:
+Autentica al administrador de la tienda y retorna un JWT. Además registra/actualiza el token activo
+para poder invalidar sesiones o hacer trazabilidad básica.
+
+Tablas:
+- t_usuarios (valida credenciales y rol=admin)
+- t_tokens_administradores (guarda token/expiración por usuario/tienda)
+
+Servicios:
+- API Gateway (Authorizer aplica a las demás rutas)
+- No usa SNS
+
+
+====================================
+USUARIOS (ADMIN)
+====================================
+
+Lambda: CrearUsuario
+Ruta: POST /usuarios
+
+Descripción:
+Crea un usuario de la tienda (por ejemplo worker). Genera su codigo_usuario y guarda datos base.
+
+Tablas:
+- t_usuarios
+- t_counters (si generas códigos incrementales tipo U001, U002, ...)
+
+Servicios:
+- No usa SNS
+
+
+--------------------
+
+Lambda: ListarUsuarios
+Ruta: GET /usuarios
+
+Descripción:
+Lista usuarios de la tienda (filtrando por codigo_tienda y codigo de usuario).
+
+Tablas:
+- t_usuarios
+
+Servicios:
+- No usa SNS
+
+
+--------------------
+
+Lambda: BuscarUsuario
+Ruta: POST /usuarios/buscar
+
+Descripción:
+Busca usuarios por query (nombre/email/código) dentro de la tienda.
+
+Tablas:
+- t_usuarios
+
+Servicios:
+- No usa SNS
+
+
+--------------------
+
+Lambda: ActualizarUsuario
+Ruta: PUT /usuarios/{codigo_usuario}
+
+Descripción:
+Actualiza campos permitidos (nombre, rol, estado, etc.) del usuario de la tienda.
+
+Tablas:
+- t_usuarios
+
+Servicios:
+- No usa SNS
+
+
+--------------------
+
+Lambda: EliminarUsuario
+Ruta: DELETE /usuarios/{codigo_usuario}
+
+Descripción:
+Elimina o desactiva un usuario (recomendado: “soft delete”/estado=INACTIVO, para no perder historial).
+
+Tablas:
+- t_usuarios
+
+Servicios:
+- No usa SNS
+
+
+====================================
+GASTOS (ADMIN)
+====================================
+
+Lambda: CrearGasto
+Ruta: POST /gastos
+
+Descripción:
+Registra un gasto de la tienda (monto, categoría, fecha, descripción).
+
+Tablas:
+- t_gastos
+- t_counters (si generas códigos incrementales tipo G001, G002, ...)
+
+Servicios:
+- No usa SNS
+
+
+--------------------
+
+Lambda: ListarGastos
+Ruta: GET /gastos
+
+Descripción:
+Lista gastos de la tienda (posiblemente por rango de fechas o paginación).
+
+Tablas:
+- t_gastos
+
+Servicios:
+- No usa SNS
+
+
+--------------------
+
+Lambda: BuscarGasto
+Ruta: POST /gastos/buscar
+
+Descripción:
+Filtra gastos por categoría / fecha / texto.
+
+Tablas:
+- t_gastos
+
+Servicios:
+- No usa SNS
+
+
+--------------------
+
+Lambda: ActualizarGasto
+Ruta: PUT /gastos/{codigo_gasto}
+
+Descripción:
+Edita un gasto existente.
+
+Tablas:
+- t_gastos
+
+Servicios:
+- No usa SNS
+
+
+--------------------
+
+Lambda: EliminarGasto
+Ruta: DELETE /gastos/{codigo_gasto}
+
+Descripción:
+Elimina (o desactiva) un gasto.
+
+Tablas:
+- t_gastos
+
+Servicios:
+- No usa SNS
+
+
+====================================
+ANALÍTICA + ALERTAS (ADMIN)
+====================================
+
+Lambda: ActualizarAnalitica
+Ruta: POST /analitica
+
+Descripción:
+Calcula y guarda métricas agregadas (por día/semana/mes) de la tienda: ventas, ganancia,
+productos sin stock, etc. En base a reglas, emite “eventos de alerta” para notificaciones.
+
+Tablas:
+- t_analitica (guarda métricas calculadas por tienda y fecha)
+- (lectura) t_ventas (para cálculos)
+- (lectura) t_productos 
+- (lectura) t_usuarios 
+- (lectura) t_gastos 
+
+Servicios:
+- SNS: publica eventos en AlertasSAAI (totalventas_0, productoTopSinStock
+, totalVentas_0, gananciaDiaBaja)
+  que luego terminan en GuardarNotificacion.
+- No escribe directamente en t_notificaciones (lo hace GuardarNotificacion).
+- Invoca EmitirEventosWs con evento analitica_actualizada
+--------------------
+
+Lambda: VerAnalitica
+Ruta: GET /analitica
+
+Descripción
+
+Devuelve las métricas analíticas calculadas previamente para la tienda.
+No recalcula información; únicamente consulta los datos almacenados en
+t_analitica. (Este endpoint no recalcula; solo consulta t_analitica para evitar cómputo repetido y mantener tiempos de respuesta bajos.)
+
+Este endpoint es usado por el dashboard del administrador.
+
+Tablas
+-	t_analitica
+Servicios
+-	No usa SNS
+-	No ejecuta cálculos pesados
+
+--------------------
+
+Lambda: GuardarNotificacion  (compartido)
+Ruta: Interna (SNS → Lambda)
+
+Descripción:
+Consume mensajes del topic AlertasSAAI, construye la notificación final y la guarda
+para que el frontend pueda listarla. Se reutiliza desde distintas fuentes de alertas.
+
+Tablas:
+- t_notificaciones
+
+Servicios:
+- SNS: se dispara por suscripción al topic AlertasSAAI
+
+
+====================================
+REPORTES (ADMIN) – BAJO DEMANDA
+====================================
+
+Lambda: GenerarReporteInventario
+Ruta: POST /reportes/inventario
+
+Descripción:
+Genera un reporte (ej. Excel) del inventario actual de la tienda. Guarda el archivo en S3
+y registra un item de historial del reporte (metadata + url).
+
+Tablas:
+- t_reportes (historial y metadata del reporte)
+- (lectura) t_productos
+
+Servicios:
+- S3: saai-tiendas/codigo-reporte-SAAI/reporte (carpeta por tienda)
+- No usa SNS
+
+
+--------------------
+
+Lambda: GenerarReporteVentas
+Ruta: POST /reportes/ventas
+
+Descripción:
+Genera reporte de ventas del período solicitado o del día actual.
+
+Tablas:
+- t_reportes
+- (lectura) t_ventas
+
+Servicios:
+- S3: saai-tiendas/codigo-reporte-SAAI/reporte
+- No usa SNS
+
+
+--------------------
+
+Lambda: GenerarReporteGastos
+Ruta: POST /reportes/gastos
+
+Descripción:
+Genera reporte de gastos del período solicitado o del día actual.
+
+Tablas:
+- t_reportes
+- (lectura) t_gastos
+
+Servicios:
+- S3: saai-tiendas/codigo-reporte-SAAI/reporte
+- No usa SNS
+
+
+--------------------
+
+Lambda: GenerarReporteGeneral
+Ruta: POST /reportes/general
+
+Descripción:
+Genera un reporte combinado (inventario + ventas + gastos + indicadores).
+
+Tablas:
+- t_reportes
+- (lectura) t_productos
+- (lectura) t_ventas
+- (lectura) t_gastos
+
+Servicios:
+- S3: saai-tiendas/codigo-reporte-SAAI/reporte
+- No usa SNS
+
+
+--------------------
+
+Lambda: ListarHistorialReportes
+Ruta: GET /reportes/historial
+
+Descripción:
+Devuelve el historial de reportes generados para la tienda (con metadata y link de descarga).
+En ListarHistorialReportes, el backend genera un presigned_url fresco para cada reporte y lo devuelve como download_url en el response.
+Tablas:
+- t_reportes
+
+Servicios:
+- S3 (solo para links/keys ya guardadas).
+- No usa SNS
+
+
+====================================
+PREDICCIONES (ML) – DEMANDA
+====================================
+
+Lambda: PrediccionDemanda
+Ruta: POST /predicciones
+
+Descripción:
+Obtiene la predicción de demanda del producto (mínimo: para mañana; adicional: suma próxima semana (Calcula los prox 7 dias y lo suma)).
+Guarda el resultado para evitar recalcular en exceso y permitir historial.
+
+Tablas:
+- t_predicciones (historial de predicciones por tienda y producto)
+- (lectura) t_productos (stock actual para comparar y activar alertas)
+
+Servicios:
+- SageMaker Endpoint (InvokeEndpoint)
+- SNS: publica en AlertasSAAI si detecta “stockactual < demanda_manana” o “stockactual < demanda_proxima_semana”
+- No escribe directamente en t_notificaciones (lo hace GuardarNotificacion)
+
+
+====================================
+PIPELINE ENTRENAMIENTO (AUTOMÁTICO CADA 3 DÍAS)
+====================================
+
+Lambda: GeneraDataset
+Ruta: Interna (EventBridge Scheduler)
+
+Descripción:
+Construye el dataset para entrenamiento (por tienda o global, según tu diseño) y lo sube a S3.
+
+Tablas:
+- (lectura) t_ventas
+- (lectura) t_productos
+- (lectura) t_gastos (si lo usas como feature)
+- (opcional) t_analitica (features agregadas)
+
+Servicios:
+- EventBridge (regla “cada 3 días”)
+- S3: saai-tiendas/codigo-reporte-SAAI/ml-dataset
+
+
+--------------------
+
+Lambda: EntrenarModelo
+Ruta: Interna (invocado por GeneraDataset)
+
+Descripción:
+Lanza un SageMaker Training Job usando el dataset en S3. Al finalizar, publica el modelo
+en S3 (artifacts) y/o actualiza el endpoint (según estrategia).
+
+Servicios:
+- SageMaker Training Job
+- S3: saai-tiendas/codigo-reporte-SAAI/ml-modelo
+- (Opcional) puede actualizar/crear endpoint
+
+
+====================================
+FIN
+====================================
+4. Arquitectura SAAI (Plataforma)
+
+4.1 Endpoints (Request/Response)
+SAAI – BACKEND CORE (SUPER ADMIN)
+ENDPOINTS + REQUEST & RESPONSE
+=====================================
+
+NOTAS GENERALES
+---------------
+- UUID: uso interno (DynamoDB)
+- Códigos: uso frontend (T001, SAAI001, etc.)
+- t_counters: usado SOLO al crear entidades
+- Authorizer aplicado a todas las rutas excepto /login
+- RegistrarTienda crea TIENDA + USUARIO ADMIN de la tienda
+- SNS Bienvenida: correo + setup inicial
+- S3: carpeta por tienda
+
+FORMATO GENERAL
+---------------
+Request:
+{
+  "body": { ... }
+}
+
+Response:
+{
+  "success": true,
+  "message": "string",
+  "data": { ... }
+}
+
+==================================================
+AUTH – SAAI
+==================================================
+
+Lambda: LoginUsuario
+Método: POST
+Path: /login
+
+Request:
+{
+  "body": {
+    "email": "saai@saai.com",
+    "password": "123456"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Login exitoso",
+  "data": {
+    "token": "jwt_token",
+    "user": {
+      "codigo_usuario": "SAAI001",
+      "nombre": "SAAI Admin",
+      "role": "saai"
+    },
+    "expires": 1731100000
+  }
+}
+
+==================================================
+TIENDAS (TENANTS)
+==================================================
+
+Lambda: RegistrarTienda
+Método: POST
+Path: /tiendas
+
+DESCRIPCIÓN:
+- Registra una nueva tienda (tenant)
+- Crea el usuario ADMIN de la tienda
+- Genera códigos usando t_counters
+- Dispara SNS de bienvenida
+- Crea carpeta en S3
+
+Request:
+{
+  "body": {
+    "nombre_tienda": "Bodega San Juan",
+    "email_tienda": "bodega@correo.com",
+    "telefono": "999888777",
+    "admin": {
+      "nombre": "Juan Perez",
+      "email": "admin@bodega.com",
+      "password": "123456"
+    }
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Tienda registrada correctamente",
+  "data": {
+    "codigo_tienda": "T002",
+    "codigo_usuario_admin": "A001",
+    "estado": "ACTIVA"
+  }
+}
+
+------------------------------------
+
+Lambda: ListarTiendas
+Método: GET
+Path: /tiendas
+
+Request:
+{
+  "body": {}
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "tiendas": [
+      {
+        "codigo_tienda": "T002",
+        "nombre_tienda": "Bodega San Juan",
+        "estado": "ACTIVA",
+        "created_at": "2025-11-08"
+      }
+    ]
+   "next_token": "..."
+  }
+}
+
+------------------------------------
+
+Lambda: BuscarTienda
+Método: POST
+Path: /tiendas/buscar
+
+Request:
+{
+  "body": {
+    "query": "San Juan"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "tiendas": [
+      {
+        "codigo_tienda": "T002",
+        "nombre_tienda": "Bodega San Juan",
+        "estado": "ACTIVA"
+      }
+    ]
+  }
+}
+
+------------------------------------
+
+Lambda: ActualizarTiendas
+Método: PUT
+Path: /tiendas/{codigo_tienda}
+
+Request:
+{
+  "body": {
+    "nombre_tienda": "Bodega San Juan SAC",
+    "estado": "SUSPENDIDA"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Tienda actualizada",
+  "data": {
+    "codigo_tienda": "T002",
+    "estado": "SUSPENDIDA"
+  }
+}
+
+------------------------------------
+
+Lambda: EliminarTienda
+Método: DELETE
+Path: /tiendas/{codigo_tienda}
+
+DESCRIPCIÓN:
+- Eliminación lógica (estado = ELIMINADA)
+
+Request:
+{
+  "body": {
+    "motivo": "Cierre definitivo"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "message": "Tienda eliminada",
+  "data": {
+    "codigo_tienda": "T002"
+  }
+}
+
+==================================================
+FIN
+==================================================
+
+4.2 Lambdas (qué hace cada una, tablas y servicios)
+SAAI – BACKEND SAAI (PLATAFORMA) – DOCUMENTO DE LAMBDAS
+=====================================================
+
+Este documento describe ÚNICAMENTE las Lambdas del backend “SAAI” (la plataforma que gestiona TIENDAS),
+en el mismo estilo del documento de TRABAJADOR/ADMIN: qué hace cada Lambda, tablas involucradas y
+servicios AWS relevantes.
+
+Notas
+-----
+- “SAAI” aquí = backend central (dueño de la plataforma), NO el admin de tienda.
+- Este backend crea/gestiona tiendas y crea el usuario admin inicial de cada tienda.
+- Token tables separadas: t_tokens_saai (SAAI), t_tokens_administradores (Admin), t_tokens_trabajadores (Worker).
+
+=====================================================
+AUTH (SAAI)
+=====================================================
+
+Lambda: LoginUsuario
+Ruta: POST /login
+
+Descripción:
+Autentica al usuario “SAAI” (plataforma). Retorna un JWT para operar rutas de /tiendas y guarda
+la sesión/token activo (para invalidar sesiones o trazabilidad).
+
+Tablas:
+- t_usuarios  (valida credenciales y rol=saai)
+- t_tokens_saai  (registra token/expiración por usuario SAAI)
+
+Servicios:
+- API Gateway (Authorizer protege las rutas excepto /login)
+- No usa SNS
+
+
+=====================================================
+TIENDAS (SAAI)
+=====================================================
+
+Lambda: RegistrarTienda
+Ruta: POST /tiendas
+
+Descripción:
+Registra una nueva tienda en la plataforma:
+1) Crea el registro de tienda (codigo_tienda + metadata).
+2) Crea el usuario ADMIN inicial de esa tienda (con password inicial) en t_usuarios.
+3) Publica un evento de “bienvenida” (si usas SnsBienvenida) para enviar correo y preparar S3.
+
+Tablas:
+- t_tiendas  (crea el item de tienda)
+- t_usuarios  (crea usuario admin de la tienda)
+- t_counters  (si generas códigos incrementales: T001, A001, etc.)
+
+Servicios:
+- SNS: SnsBienvenida (publica evento “tienda_creada”)
+- CloudWatch Logs
+
+Notas:
+- Aunque el admin sea “uno por tienda”, igual guardas codigo_tienda en el usuario admin para filtrar todo
+  lo demás por tienda.
+
+-----------------------------------------------------
+
+Lambda: ListarTiendas
+Ruta: GET /tiendas
+
+Descripción:
+Lista tiendas registradas en la plataforma (paginación recomendada).
+
+Tablas:
+- t_tiendas
+
+Servicios:
+- No usa SNS
+
+-----------------------------------------------------
+
+Lambda: BuscarTienda
+Ruta: POST /tiendas/buscar
+
+Descripción:
+Busca tiendas por query (nombre, RUC, codigo_tienda, etc.).
+
+Tablas:
+- t_tiendas
+
+Servicios:
+- No usa SNS
+
+-----------------------------------------------------
+
+Lambda: ActualizarTiendas
+Ruta: PUT /tiendas/{codigo_tienda}
+
+Descripción:
+Actualiza datos de una tienda (nombre comercial, dirección, estado, plan, etc.).
+
+Tablas:
+- t_tiendas
+
+Servicios:
+- No usa SNS
+
+-----------------------------------------------------
+
+Lambda: EliminarTienda
+Ruta: DELETE /tiendas/{codigo_tienda}
+
+Descripción:
+Elimina o desactiva una tienda.
+Recomendación: “soft delete” (estado=INACTIVO) para no romper historial de ventas/reportes.
+
+Tablas:
+- t_tiendas
+- t_usuarios (desactivar admin de la tienda o marcar estado=INACTIVO)
+
+Servicios:
+- No usa SNS
+
+
+=====================================================
+SUSCRIPCIONES / ALERTAS  
+=====================================================
+
+Lambda: SuscribirSnsAlerta
+Ruta: Interna (SAAI → Lambda)  
+
+Descripción:
+Automatiza crear una suscripción a un topic SNS (AlertasSAAI) para un email.
+En AWS, esto se puede hacer con SDK (sns:Subscribe), pero:
+- Para “filtros por tienda”, el filtro se define en la SUSCRIPCIÓN (FilterPolicy) o en el mensaje (MessageAttributes).
+
+Servicios:
+- SNS (Subscribe API)
+
+Recomendación práctica (AWS Academy):
+- Mantenerlo simple: crear la suscripción manualmente 1 vez por tienda (o por ambiente).
+- Si luego automatizas, igual habrá confirmación manual del correo, pero la “creación + filtro” sí puede
+  declararse en IaC (Serverless/CloudFormation) o via Lambda + SDK.
+
+
+=====================================================
+FIN
+=====================================================
+==================================================
+WEBSOCKET (TIEMPO REAL) – SERVICIO TRANSVERSAL
+Descripción general:
+Este módulo habilita actualizaciones en tiempo real en el frontend sin necesidad de refrescar manualmente.
+El flujo es:
+WebSocket API (API Gateway) → onConnect / onDisconnect → t_ws_connections,
+y los Lambdas de negocio invocan EmitirEventosWs para notificar cambios a los clientes conectados de la tienda.
+Tablas:
+•	t_ws_connections (conexiones WebSocket activas por tenant_id)
+Servicios:
+•	API Gateway WebSocket API
+•	Lambda
+•	DynamoDB
+•	API Gateway Management API (postToConnection)
+________________________________________
+Lambda: onConnect
+Ruta: Interna (WebSocket API → Lambda)
+Descripción:
+Se ejecuta cuando el cliente abre una conexión WebSocket.
+Registra la conexión en t_ws_connections asociándola al tenant_id (codigo_tienda) y a la identidad del usuario.
+Esto permite emitir eventos únicamente a conexiones pertenecientes a esa tienda.
+Tablas:
+•	t_ws_connections (INSERT/PUT)
+Servicios:
+•	API Gateway WebSocket (route: $connect)
+•	No usa SNS
+________________________________________
+Lambda: onDisconnect
+Ruta: Interna (WebSocket API → Lambda)
+Descripción:
+Se ejecuta cuando el cliente cierra la conexión o esta expira.
+Elimina la conexión en t_ws_connections para evitar envíos fallidos y mantener el estado de conexiones activo consistente.
+Tablas:
+•	t_ws_connections (DELETE)
+Servicios:
+•	API Gateway WebSocket (route: $disconnect)
+•	No usa SNS
+________________________________________
+Lambda: EmitirEventosWs
+Ruta: Interna (invocado por Lambdas de negocio)
+Descripción:
+Emite eventos a los clientes conectados de una tienda.
+Recibe un evento interno con tenant_id y tipo, consulta en t_ws_connections las conexiones activas del tenant_id,
+y envía el payload a cada connectionId usando el API Gateway Management API (postToConnection).
+Si un envío falla por conexión inválida, limpia esa conexión en t_ws_connections para mantener la tabla consistente.
+Tablas:
+•	t_ws_connections (QUERY por tenant_id; DELETE de conexiones inválidas)
+Servicios:
+•	DynamoDB (lectura de conexiones)
+•	API Gateway Management API (postToConnection)
+•	No usa SNS
+________________________________________
+Eventos realtime confirmados (origen → tipo)
+1.	RegistrarVenta → EmitirEventosWs
+•	tipo: "venta_registrada"
+•	Objetivo: actualizar en tiempo real el listado de ventas, stock y notificaciones del dashboard.
+2.	ActualizarAnalitica → EmitirEventosWs
+•	tipo: "analitica_actualizada"
+•	Objetivo: actualizar en tiempo real el panel de analítica (verAnalitica )y las secciones dependientes (ListarNotificaciones).
+3.	PrediccionDemanda → EmitirEventosWs
+•	tipo: "prediccion_generada"
+•	Objetivo: actualizar en tiempo real la vista de las notificaciones.
+==================================================
+FIN – WEBSOCKET
+
+==================================================
+RECURSOS AWS Y ESTRUCTURA DE DATOS (OFICIAL)
+==================================================
+DYNAMODB – TABLAS (MODELO ESTÁNDAR)
+Convención general:
+•	Todas las tablas operativas siguen el patrón:
+• tenant_id (codigo_tienda)
+• entity_id (código/ID de la entidad)
+• data (JSON completo de la entidad)
+•	Campos de control recomendados dentro de data:
+• estado: ACTIVO | SUSPENDIDA | ELIMINADA (soft delete)
+• created_at / updated_at (hora Perú, definida por backend)
+• created_by (codigo_usuario obtenido del JWT, cuando aplique)
+ESTADOS OFICIALES DE TIENDA (t_tiendas)
+
+ACTIVA
+- La tienda está operativa
+- Puede usar el sistema normalmente
+
+SUSPENDIDA
+- La tienda existe pero no puede operar
+- Motivos: falta de pago, pausa temporal, decisión administrativa
+- Los datos se conservan
+- Puede reactivarse
+
+ELIMINADA
+- Eliminación lógica del tenant
+- La tienda no puede volver a activarse
+- Paso previo a purga definitiva
+________________________________________
+t_tiendas
+Propósito:
+•	Almacena la información de cada tienda registrada en SAAI.
+Key:
+•	tenant_id = "SAAI" (o partición fija del sistema)
+•	entity_id = codigo_tienda (ej. T002)
+data (contiene):
+•	codigo_tienda, nombre_tienda, ruc (si aplica), rubro
+•	email_admin, nombre_admin
+•	estado, created_at, updated_at
+________________________________________
+t_usuarios
+Propósito:
+•	Usuarios por tienda (admin y trabajadores).
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = codigo_usuario (ej. U002)
+data (contiene):
+•	codigo_usuario, nombre, email, role (admin/worker)
+•	password_hash (o equivalente)
+•	estado, created_at, updated_at
+•	created_by (si el creador fue admin)
+________________________________________
+t_productos
+Propósito:
+•	Inventario de la tienda.
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = codigo_producto (ej. T002P001)
+data (contiene):
+•	codigo_producto, nombre, categoria, marca (si aplica)
+•	precio_unitario, stock, stock_minimo
+•	estado, created_at, updated_at
+•	created_by / updated_by
+________________________________________
+t_ventas
+Propósito:
+•	Ventas registradas en la tienda.
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = codigo_venta (ej. T002V015)
+data (contiene):
+•	codigo_venta, productos[] (codigo_producto, cantidad, precio_unitario)
+•	metodo_pago, total, fecha (hora Perú)
+•	codigo_usuario (quien registró la venta, desde JWT)
+•	estado (si aplica), created_at
+________________________________________
+t_gastos
+Propósito:
+•	Gastos registrados por la tienda.
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = codigo_gasto (ej. G001)
+data (contiene):
+•	codigo_gasto, descripcion, monto, categoria, fecha
+•	codigo_usuario (quien registró, desde JWT)
+•	estado, created_at, updated_at
+________________________________________
+t_notificaciones
+Propósito:
+•	Notificaciones persistidas que ve el admin/worker en el frontend.
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = codigo_notificacion (ej. N001)
+data (contiene):
+•	codigo_notificacion, tipo, titulo, mensaje, origen
+•	severidad (INFO/CRITICAL)
+•	fecha (hora Perú)
+•	estado (ACTIVO/INACTIVO)
+________________________________________
+t_analitica
+Propósito:
+•	Métricas agregadas calculadas por tienda y periodo.
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = clave por fecha/periodo (ej. "2025-11-08" o "2025-11-01_2025-11-08")
+data (contiene):
+•	periodo (fecha_inicio, fecha_fin, dias)
+•	ventas: total_ventas, total_ingresos, promedio_diario
+•	gastos: total_gastos, total_egresos, balance
+•	inventario: productos_sin_stock, productos_bajo_stock, valor_total
+•	productos_top[], ventas_diarias[]
+•	updated_at (hora Perú)
+________________________________________
+t_reportes
+Propósito:
+•	Historial de reportes generados y su ubicación en S3.
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = codigo_reporte (ej. R001)
+data (contiene):
+•	codigo_reporte, tipo (inventario/ventas/gastos/general)
+•	fecha_generacion (hora Perú)
+•	s3_bucket, s3_key
+•	download_url (si decides guardarlo)
+•	estado
+________________________________________
+t_predicciones
+Propósito:
+•	Cache/histórico de predicciones por producto y fecha.
+•	Evita recalcular predicción ante múltiples consultas y permite análisis histórico.
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = codigo_producto#fecha_prediccion (ej. "T002P001#2025-11-08")
+data (contiene):
+•	codigo_producto, fecha_prediccion (hora Perú, definida por backend)
+•	demanda_manana, demanda_proxima_semana
+•	created_at
+________________________________________
+t_tokens_trabajadores / t_tokens_administradores / t_tokens_saai
+Propósito:
+•	Control de sesión por frontend/rol, revocación básica y trazabilidad.
+Key:
+•	tenant_id = codigo_tienda (o "SAAI" para el portal central)
+•	entity_id = codigo_usuario
+data (contiene):
+•	token_hash (recomendado, no guardar token plano)
+•	issued_at, expires_at
+________________________________________
+t_counters
+Propósito:
+•	Generación de códigos incrementales por tienda y entidad (U001, G001, V015, etc.).
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = tipo_contador (ej. "USUARIOS", "PRODUCTOS", "VENTAS", "GASTOS", "REPORTES", "NOTIFICACIONES")
+data (contiene):
+•	current_value (entero)
+•	updated_at
+________________________________________
+t_ws_connections
+Propósito:
+•	Conexiones WebSocket activas por tienda (tenant).
+Key:
+•	tenant_id = codigo_tienda
+•	entity_id = connection_id (API Gateway)
+data (contiene):
+•	connection_id
+•	codigo_usuario, role
+•	connected_at (hora Perú)
+•	estado (ACTIVO)
+•	ttl  
+{
+  "connection_id": "...",
+  "codigo_usuario": "U001",
+  "role": "admin",
+  "pantalla": "ventas|notificaciones|analitica",
+  "connected_at": "...",
+  "estado": "ACTIVO",
+  "ttl": 1730000000
+}
+==================================================
+==================================================
+S3 – ESTRUCTURA (OFICIAL)
+Bucket recomendado:
+•	saai-tiendas (o nombre equivalente)
+Estructura por tienda:
+•	/{codigo_tienda}/
+/reportes/ 
+/ml-datasets/
+/ml-models/
+
+Reglas:
+•	Los reportes se generan bajo demanda y se almacenan en S3.
+•	El historial y metadata se guarda en t_reportes (bucket/key y/o download_url).
+•	Los datasets/modelos para ML se almacenan dentro de /ml/.
+==================================================
+SNS – TOPICS Y MENSAJERÍA (OFICIAL)
+________________________________________
+Topic: AlertasSAAI
+________________________________________
+Propósito:
+• Centraliza todas las alertas del sistema (stock, analítica y predicción).
+• Distribuye cada alerta a dos destinos en paralelo:
+1.	Persistencia: GuardarNotificacion guarda la alerta en t_notificaciones (para mostrarse en la plataforma).
+2.	Correo: EmailAlerta recibe solo las alertas que cumplan el filtro (por severidad/tipo/tenant).
+Publicadores:
+• RegistrarVenta
+• ActualizarAnalitica
+• PrediccionDemanda
+Consumidores:
+• GuardarNotificacion (SNS → Lambda) → guarda TODAS las alertas en DynamoDB (t_notificaciones).
+• EmailAlerta (SNS → Email) → envía correo (al admin de la tienda correspondiente) SOLO si el filtro lo permite.
+Regla oficial (almacenamiento vs correo):
+• Toda alerta publicada en AlertasSAAI se guarda en t_notificaciones.
+• El correo NO reemplaza el guardado: se ejecuta adicionalmente, según filtros.
+MessageAttributes (OBLIGATORIOS – para filtros):
+• tenant_id (STRING) ← codigo_tienda (multi-tenant)
+• tipo (STRING) ← tipo exacto de alerta (lista oficial abajo)
+• severidad (STRING) ← INFO | CRITICAL
+• origen (STRING) ← registrarVenta | actualizarAnalitica | prediccionDemanda
+• ts (STRING) ← timestamp oficial (America/Lima, ISO-8601)
+Tipos oficiales de alerta (tipo):
+RegistrarVenta:
+•	sinStock (Dirigido al correo admin y notificaciones)
+•	bajoStock (<5) (Dirigido a notificaciones)
+ActualizarAnalitica:
+•	totalventas_0  (Dirigido al correo admin y notificaciones)
+•	gananciaDiaBaja   (Dirigido a notificaciones)
+•	productoTopSinStock   (Dirigido a notificaciones)
+PrediccionDemanda:
+•	stockBajoManana  (Dirigido al correo admin y notificaciones)
+•	stockBajoProximaSemana   (Dirigido a notificaciones)
+Estructura del mensaje (Body):
+• El body contiene el detalle necesario para construir la notificación final y/o el correo:
+{
+"titulo": "string",
+"mensaje": "string",
+"detalle": {
+"codigo_producto": "string (si aplica)",
+"nombre_producto": "string (si aplica)",
+"stock_actual": "number (si aplica)",
+"ventas_dia": "number (si aplica)",
+"ganancia_dia": "number (si aplica)",
+"demanda_manana": "number (si aplica)",
+"demanda_proxima_semana": "number (si aplica)",
+"otros": "campos adicionales según el tipo"
+}
+}
+Política oficial de correo (EmailAlerta):
+• CRITICAL → se envía correo + se guarda en t_notificaciones.
+• INFO → no se envía correo + se guarda.
+Filtros oficiales recomendados en EmailAlerta (por suscripción):
+• Filtro mínimo por tienda:
+•	tenant_id == <codigo_tienda>
+• Filtro por severidad:
+•	severidad IN ["CRITICAL"] 
+• Filtro por tipo (si aplica):
+•	tipo IN ["sinStock", "totalventas_0", "stockBajoManana", ...] según preferencia.
+________________________________________
+Topic: BienvenidaSAAI
+________________________________________
+Propósito:
+• Orquesta acciones automáticas posteriores al registro de una tienda.
+• Se dispara únicamente cuando RegistrarTienda crea una tienda correctamente.
+Publicador:
+• RegistrarTienda
+Consumidores:
+• CorreoBienvenida (SNS → Lambda) → envía correo de bienvenida al admin.
+• CrearCarpetaS3 (SNS → Lambda) → crea la carpeta base en S3 para la tienda.
+• SuscribirSnsAlerta (SNS → Lambda) → crea la suscripción del correo del admin al topic AlertasSAAI con filtros por tenant_id y severidad/tipo según política.
+Estructura del mensaje (Body):
+{
+"tenant_id": "codigo_tienda",
+"correo_admin": "string",
+"nombre_tienda": "string",
+"ts": "ISO-8601 hora Perú"
+}
+MessageAttributes (OBLIGATORIOS):
+• tenant_id (STRING)
+• ts (STRING)
+Resultado esperado del flujo BienvenidaSAAI:
+• Admin recibe correo de bienvenida.
+• Se crea la carpeta S3: saai-tiendas/<tenant_id>/...
+• El correo del admin queda suscrito a AlertasSAAI con filtro por tenant_id y severidad/tipo.
+==================================================
+FIN – RECURSOS AWS Y ESTRUCTURA DE DATOS
+

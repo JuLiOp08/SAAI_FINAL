@@ -1,0 +1,51 @@
+{
+  "name": "saai-backend",
+  "version": "1.0.0",
+  "description": "SAAI Backend - Sistema Inteligente de Gestión de Inventario para Tiendas",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "deploy-dev": "serverless deploy --stage dev",
+    "deploy-prod": "serverless deploy --stage prod",
+    "remove": "serverless remove",
+    "logs": "serverless logs",
+    "info": "serverless info",
+    "test": "python -m pytest tests/",
+    "lint": "flake8 .",
+    "format": "black ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saai/backend"
+  },
+  "keywords": [
+    "saai",
+    "inventario",
+    "tiendas",
+    "aws",
+    "serverless",
+    "lambda",
+    "dynamodb",
+    "multi-tenant"
+  ],
+  "author": "SAAI Team",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-python-requirements": "^6.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.9.0"
+  },
+  "serverless": {
+    "service": "saai-backend",
+    "frameworkVersion": "3",
+    "provider": {
+      "name": "aws",
+      "region": "us-east-1",
+      "stage": "dev"
+    }
+  }
+}

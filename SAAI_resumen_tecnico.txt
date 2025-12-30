@@ -1,0 +1,69 @@
+1) SAAI – Resumen Técnico
+
+SAAI (Smart Assistant for Inventory) es una plataforma serverless en AWS para operación de tiendas (multi-tenant), con 3 frontends (Admin, Trabajador, SAAI) y un backend basado en API Gateway + Lambdas + DynamoDB, con alertas SNS, reportes en S3, predicción de demanda con SageMaker y actualizaciones en tiempo real vía WebSockets (solo notifica, el frontend refetch).
+
+Componentes principales
+
+Frontends (Amplify / React)
+
+ADMIN (Dueño): usuarios, gastos, analítica, predicción de demanda, reportes, notificaciones.
+
+TRABAJADOR: ventas, inventario, gastos, notificaciones operativas.
+
+SAAI (Plataforma): registro/gestión global de tiendas, administración del sistema y recursos base.
+
+Autenticación y seguridad
+
+/login público; el resto de rutas privadas protegidas por Lambda Authorizer en API Gateway.
+
+Multi-tenant: tenant_id = codigo_tienda sale del JWT, no del frontend.
+
+Tokens por rol (tablas separadas): t_tokens_trabajadores, t_tokens_administradores, t_tokens_saai.
+
+Persistencia (DynamoDB)
+
+Modelo estándar de ítems: tenant_id + entity_id + data (JSON completo).
+
+UUID interno para relaciones cuando corresponde; el frontend opera con códigos (T002P001, T002V015, etc.).
+
+Soft delete: estado=INACTIVO + metadatos de baja.
+
+Fecha/Hora oficial: backend (America/Lima).
+
+Alertas (SNS)
+
+AlertasSAAI como bus de eventos de alertas.
+
+GuardarNotificacion (SNS→Lambda) persiste todo en t_notificaciones.
+
+SNS Email Subscriptions con FilterPolicy envían correos directos por filtros (tenant_id, severity=CRITICAL).
+
+También se emiten eventos en tiempo real a WebSockets para refrescar la UI.
+
+WebSockets (API Gateway WebSocket)
+
+$connect y $disconnect gestionan conexiones en t_ws_connections (por tienda/rol).
+
+EmitirEventosWs publica eventos hacia clientes conectados.
+
+WebSocket no manda data completa: solo notifica (“venta registrada”, “analítica actualizada”, “alerta nueva”) y el frontend hace refetch.
+
+Analítica
+
+ActualizarAnalitica calcula métricas y guarda en t_analitica (por tienda y fecha), y publica alertas en SNS.
+
+VerAnalitica consulta t_analitica para dashboard (sin recálculo).
+
+Reportes (S3)
+
+Se generan bajo demanda y se guardan en S3.
+
+ListarHistorialReportes devuelve historial y genera presigned_url fresco en cada consulta.
+
+Machine Learning (Predicción Demanda)
+
+PrediccionDemanda primero consulta t_predicciones por (tenant_id, producto, fecha Perú).
+
+Si existe → retorna; si no → invoca SageMaker Endpoint, guarda y retorna.
+
+Puede publicar alertas (si stock < demanda) + emitir evento WebSocket.
