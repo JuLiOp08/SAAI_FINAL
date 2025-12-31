@@ -14,6 +14,7 @@ from utils import (
     put_item_standard,
     obtener_fecha_hora_peru
 )
+from constants import ESTADO_TIENDA_ACTIVA, ESTADO_TIENDA_SUSPENDIDA, ESTADO_TIENDA_ELIMINADA
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -49,7 +50,7 @@ def handler(event, context):
         
         # Validar que el usuario sea SAAI
         user_info = extract_user_from_jwt_claims(event)
-        if not user_info or user_info.get('rol') != 'SAAI':
+        if not user_info or user_info.get('rol') != 'saai':
             return error_response("Solo usuarios SAAI pueden actualizar tiendas", 403)
         
         # Obtener código de tienda del path
@@ -75,7 +76,7 @@ def handler(event, context):
         
         if 'estado' in body:
             estado = str(body['estado']).strip().upper()
-            if estado not in ['ACTIVA', 'SUSPENDIDA', 'ELIMINADA']:
+            if estado not in [ESTADO_TIENDA_ACTIVA, ESTADO_TIENDA_SUSPENDIDA, ESTADO_TIENDA_ELIMINADA]:
                 return validation_error_response("Estado debe ser ACTIVA, SUSPENDIDA o ELIMINADA")
             
             # Agregar metadatos según el estado

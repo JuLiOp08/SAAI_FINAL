@@ -49,7 +49,7 @@ def handler(event, context):
         
         # Validar que el usuario sea SAAI
         user_info = extract_user_from_jwt_claims(event)
-        if not user_info or user_info.get('rol') != 'SAAI':
+        if not user_info or user_info.get('rol') != 'saai':
             return error_response("Solo usuarios SAAI pueden buscar tiendas", 403)
         
         # Parse request body
@@ -72,11 +72,12 @@ def handler(event, context):
         for item in items:
             data = item.get('data', {})
             
-            # Buscar en nombre o código
+            # Buscar en nombre, código o email
             nombre = data.get('nombre_tienda', '').lower()
             codigo = data.get('codigo_tienda', '').lower()
+            email = data.get('email_tienda', '').lower()
             
-            if query_text in nombre or query_text in codigo:
+            if query_text in nombre or query_text in codigo or query_text in email:
                 tienda = {
                     'codigo_tienda': data.get('codigo_tienda'),
                     'nombre_tienda': data.get('nombre_tienda'),

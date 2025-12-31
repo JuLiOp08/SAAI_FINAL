@@ -17,6 +17,7 @@ from utils import (
     generar_codigo_usuario,
     obtener_fecha_hora_peru
 )
+from constants import ROLE_MAPPING_REVERSE, ESTADO_ACTIVO, ESTADO_TIENDA_ACTIVA
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -67,7 +68,7 @@ def handler(event, context):
         
         # Validar que el usuario sea SAAI
         user_info = extract_user_from_jwt_claims(event)
-        if not user_info or user_info.get('rol') != 'SAAI':
+        if not user_info or user_info.get('rol') != 'saai':
             return error_response("Solo usuarios SAAI pueden registrar tiendas", 403)
         
         # Parse request body
@@ -101,7 +102,7 @@ def handler(event, context):
             'nombre_tienda': str(body['nombre_tienda']).strip(),
             'email_tienda': str(body['email_tienda']).strip().lower(),
             'telefono': str(body['telefono']).strip(),
-            'estado': 'ACTIVA',
+            'estado': ESTADO_TIENDA_ACTIVA,
             'created_at': fecha_actual,
             'updated_at': fecha_actual
         }
@@ -125,10 +126,10 @@ def handler(event, context):
             'codigo_usuario': codigo_usuario_admin,
             'nombre': str(admin_data['nombre']).strip(),
             'email': str(admin_data['email']).strip().lower(),
-            'role': 'admin',
+            'role': ROLE_MAPPING_REVERSE['admin'],
             'password_hash': password_hash.hex(),
             'salt': salt.hex(),
-            'estado': 'ACTIVO',
+            'estado': ESTADO_ACTIVO,
             'created_at': fecha_actual,
             'updated_at': fecha_actual
         }

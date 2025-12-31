@@ -64,8 +64,8 @@ def handler(event, context):
             except ValueError:
                 return error_response("Formato de fecha inválido. Use YYYY-MM-DD", 400)
         else:
-            fecha_fin = lima_now
-            fecha_inicio = lima_now - timedelta(days=6)
+            fecha_fin = datetime.fromisoformat(fecha_actual[:10])
+            fecha_inicio = fecha_fin - timedelta(days=6)
         
         if fecha_inicio > fecha_fin:
             return error_response("Fecha inicio no puede ser mayor a fecha fin", 400)
@@ -76,22 +76,15 @@ def handler(event, context):
         # OBTENER DATOS DE GASTOS
         # =================================================================
         
-        response = gastos_table.query(
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#fecha BETWEEN :inicio AND :fin AND #data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#fecha': 'fecha',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':inicio': fecha_inicio.strftime('%Y-%m-%d'),
-                ':fin': fecha_fin.strftime('%Y-%m-%d'),
-                ':estado': 'ACTIVO'
-            }
-        )
+        result = query_by_tenant(os.environ['GASTOS_TABLE'], tenant_id)
+        todos_gastos = result.get('items', [])
         
-        gastos = response.get('Items', [])
+        # Filtrar por fechas en Python
+        gastos = []
+        for gasto in todos_gastos:
+            fecha_gasto = gasto.get('fecha', '')[:10]  # YYYY-MM-DD
+            if (fecha_inicio.strftime('%Y-%m-%d') <= fecha_gasto <= fecha_fin.strftime('%Y-%m-%d')):
+                gastos.append(gasto)
         
         if not gastos:
             return error_response("No hay gastos en el período seleccionado", 400)
@@ -114,23 +107,22 @@ def handler(event, context):
         total_egresos = 0
         
         for gasto in gastos:
-            data = gasto['data']
-            monto = float(data.get('monto', 0))
+            monto = float(gasto.get('monto', 0))
             total_egresos += monto
             
-            fecha_gasto = data.get('fecha', '')
-            categoria = data.get('categoria', 'Sin categoría')
+            fecha_gasto = gasto.get('fecha', '')
+            categoria = gasto.get('categoria', 'Sin categoría')
             
             # Datos de gasto individual
             datos_gastos.append({
-                'Código Gasto': data.get('codigo_gasto', ''),
+                'Código Gasto': gasto.get('codigo_gasto', ''),
                 'Fecha': fecha_gasto,
-                'Descripción': data.get('descripcion', ''),
+                'Descripción': gasto.get('descripcion', ''),
                 'Categoría': categoria,
                 'Monto': monto,
-                'Registrado Por': data.get('created_by', ''),  # Cambiar de 'codigo_usuario' a 'created_by'
-                'Estado': data.get('estado', 'ACTIVO'),
-                'Fecha Registro': data.get('created_at', '')[:10] if data.get('created_at') else ''
+                'Registrado Por': gasto.get('codigo_usuario', ''),
+                'Estado': gasto.get('estado', 'ACTIVO'),
+                'Fecha Registro': gasto.get('created_at', '')[:10] if gasto.get('created_at') else ''
             })
             
             # Acumular por categoría
@@ -179,8 +171,8 @@ def handler(event, context):
             {'Métrica': 'Total Egresos', 'Valor': f"S/ {total_egresos:.2f}"},
             {'Métrica': 'Promedio por Gasto', 'Valor': f"S/ {total_egresos/total_gastos:.2f}" if total_gastos > 0 else 'S/ 0.00'},
             {'Métrica': 'Categorías Únicas', 'Valor': len(datos_categorias)},
-            {'Métrica': 'Mayor Gasto', 'Valor': f"S/ {max([float(g['data'].get('monto', 0)) for g in gastos]):.2f}" if gastos else 'S/ 0.00'},
-            {'Métrica': 'Fecha Generación', 'Valor': lima_now.strftime('%Y-%m-%d %H:%M:%S')}
+            {'Métrica': 'Mayor Gasto', 'Valor': f"S/ {max([float(g.get('monto', 0)) for g in gastos]):.2f}" if gastos else 'S/ 0.00'},
+            {'Métrica': 'Fecha Generación', 'Valor': fecha_actual[:19]}
         ])
         
         # =================================================================
@@ -214,7 +206,7 @@ def handler(event, context):
         excel_buffer.seek(0)
         
         # Subir a S3
-        fecha_str = lima_now.strftime('%Y%m%d_%H%M%S')
+        fecha_str = fecha_actual[:10].replace('-', '') + '_' + fecha_actual[11:19].replace(':', '')
         s3_key = f"{tenant_id}/reportes/gastos_{codigo_reporte}_{fecha_str}.xlsx"
         
         s3_client.put_object(
@@ -243,7 +235,7 @@ def handler(event, context):
         reporte_data = {
             "codigo_reporte": codigo_reporte,
             "tipo": "gastos",
-            "fecha_generacion": lima_now.isoformat(),
+            "fecha_generacion": fecha_actual,
             "parametros": {
                 "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
                 "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
@@ -255,14 +247,15 @@ def handler(event, context):
             "tamaño_bytes": len(excel_buffer.getvalue()),
             "generado_por": codigo_usuario,
             "estado": "COMPLETADO",
-            "created_at": lima_now.isoformat()
+            "created_at": fecha_actual
         }
         
-        reportes_table.put_item(Item={
-            'tenant_id': tenant_id,
-            'entity_id': codigo_reporte,
-            'data': reporte_data
-        })
+        put_item_standard(
+            os.environ['REPORTES_TABLE'],
+            tenant_id=tenant_id,
+            entity_id=codigo_reporte,
+            data=reporte_data
+        )
         
         logger.info(f"✅ Reporte gastos generado: {codigo_reporte}")
         

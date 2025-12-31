@@ -6,7 +6,9 @@ from utils import (
     error_response,
     log_request,
     extract_tenant_from_jwt_claims,
-    query_by_tenant
+    query_by_tenant,
+    extract_pagination_params,
+    create_next_token
 )
 
 logger = logging.getLogger()
@@ -22,7 +24,10 @@ def handler(event, context):
     Según documento SAAI (ADMIN):
     Request:
     {
-        "body": {}
+        "queryStringParameters": {
+            "limit": 10,
+            "next_token": "..." (opcional)
+        }
     }
     
     Response:
@@ -37,7 +42,7 @@ def handler(event, context):
                     "role": "worker"
                 }
             ],
-            "next_token": "..."
+            "next_token": "..." (si hay más resultados)
         }
     }
     """
@@ -49,8 +54,19 @@ def handler(event, context):
         if not tenant_id:
             return error_response("Token inválido - no se encontró codigo_tienda", 401)
         
-        # Consultar usuarios de la tienda
-        items = query_by_tenant(USUARIOS_TABLE, tenant_id)
+        # Extraer parámetros de paginación SAAI 1.6
+        limit, next_token = extract_pagination_params(event)
+        
+        # Consultar usuarios de la tienda con paginación
+        result = query_by_tenant(
+            USUARIOS_TABLE, 
+            tenant_id,
+            limit=limit,
+            next_token=next_token
+        )
+        
+        items = result.get('items', [])
+        last_evaluated_key = result.get('last_evaluated_key')
         
         # Formatear respuesta
         usuarios = []
@@ -67,9 +83,14 @@ def handler(event, context):
         
         logger.info(f"Usuarios listados: {len(usuarios)} para tienda {tenant_id}")
         
-        return success_response(
-            data={"usuarios": usuarios}
-        )
+        # Preparar response con paginación
+        response_data = {"usuarios": usuarios}
+        
+        # Agregar next_token si hay más resultados
+        if last_evaluated_key:
+            response_data['next_token'] = create_next_token(last_evaluated_key)
+        
+        return success_response(data=response_data)
         
     except Exception as e:
         logger.error(f"Error listando usuarios: {str(e)}")

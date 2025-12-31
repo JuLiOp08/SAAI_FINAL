@@ -1,0 +1,1356 @@
+{
+	"info": {
+		"_postman_id": "saai-backend-2025-complete",
+		"name": "SAAI Backend - API Completa (FASE 1+2+3)",
+		"description": "Colección completa de endpoints para el sistema SAAI (Sistema de Administración y Análisis Integral).\n\n**Incluye:**\n- 10 módulos completos\n- 36 requests documentados\n- 3 roles: worker, admin, saai\n- Tests automáticos para guardar tokens\n- Variables de colección pre-configuradas\n\n**Orden de ejecución recomendado:**\n1. Login SAAI → guarda token_saai\n2. Registrar Tienda → guarda tenant_id y codigo_tienda\n3. Login Admin → guarda token_admin\n4. Login Worker → guarda token_worker\n5. Crear Producto, Ventas, Gastos, etc.\n\n**Variables requeridas:**\n- `base_url`: URL del API Gateway (configurar después del deploy)\n- `token_worker`, `token_admin`, `token_saai`: Se guardan automáticamente\n- `tenant_id`, `codigo_tienda`: Se guardan al registrar/login",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://YOUR-API-GATEWAY-ID.execute-api.us-east-1.amazonaws.com/dev",
+			"type": "string"
+		},
+		{
+			"key": "token_worker",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "token_admin",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "token_saai",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "tenant_id",
+			"value": "T001",
+			"type": "string"
+		},
+		{
+			"key": "codigo_usuario",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "codigo_producto",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "codigo_venta",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "codigo_gasto",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "codigo_tienda",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "1. AUTH",
+			"item": [
+				{
+					"name": "Login - Worker",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('token_worker', response.data.token);",
+									"    pm.collectionVariables.set('tenant_id', response.data.tenant_id);",
+									"    console.log('Token worker guardado:', response.data.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"worker@tienda.com\",\n  \"password\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Login para rol WORKER (trabajador). Permisos: productos, ventas."
+					},
+					"response": []
+				},
+				{
+					"name": "Login - Admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('token_admin', response.data.token);",
+									"    pm.collectionVariables.set('tenant_id', response.data.tenant_id);",
+									"    console.log('Token admin guardado:', response.data.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@tienda.com\",\n  \"password\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Login para rol ADMIN (administrador). Permisos: productos, ventas, gastos, analytics, reportes, usuarios, notificaciones."
+					},
+					"response": []
+				},
+				{
+					"name": "Login - SAAI",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('token_saai', response.data.token);",
+									"    console.log('Token SAAI guardado:', response.data.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"saai@platform.com\",\n  \"password\": \"saai123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Login para rol SAAI (super administrador). Permisos: gestión de tiendas + predicciones ML."
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints de autenticación. Genera JWT tokens para los 3 roles: worker, admin, saai."
+		},
+		{
+			"name": "2. USUARIOS",
+			"item": [
+				{
+					"name": "Crear Usuario",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('codigo_usuario', response.data.codigo_usuario);",
+									"    console.log('Usuario creado:', response.data.codigo_usuario);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nombre\": \"Maria Lopez\",\n  \"email\": \"maria@tienda.com\",\n  \"password\": \"123456\",\n  \"rol\": \"worker\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/usuarios",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"usuarios"
+							]
+						},
+						"description": "Crear nuevo usuario (worker o admin). Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Usuarios",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/usuarios?limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"usuarios"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "next_token",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Listar usuarios con paginación SAAI 1.6. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Usuario",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"maria\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/usuarios/buscar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"usuarios",
+								"buscar"
+							]
+						},
+						"description": "Buscar usuarios por nombre o email. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Actualizar Usuario",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nombre\": \"Maria Lopez Gonzalez\",\n  \"email\": \"maria.lopez@tienda.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/usuarios/{{codigo_usuario}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"usuarios",
+								"{{codigo_usuario}}"
+							]
+						},
+						"description": "Actualizar datos de usuario. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Eliminar Usuario",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/usuarios/{{codigo_usuario}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"usuarios",
+								"{{codigo_usuario}}"
+							]
+						},
+						"description": "Eliminar usuario (soft delete: estado=INACTIVO). Solo rol admin."
+					},
+					"response": []
+				}
+			],
+			"description": "Gestión de usuarios de la tienda (workers y admins). Solo rol admin tiene acceso."
+		},
+		{
+			"name": "3. PRODUCTOS",
+			"item": [
+				{
+					"name": "Crear Producto",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('codigo_producto', response.data.codigo_producto);",
+									"    console.log('Producto creado:', response.data.codigo_producto);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nombre\": \"Coca Cola 500ml\",\n  \"categoria\": \"Bebidas\",\n  \"precio_compra\": 1.50,\n  \"precio_venta\": 2.50,\n  \"stock\": 100,\n  \"stock_minimo\": 10\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/productos",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"productos"
+							]
+						},
+						"description": "Crear nuevo producto. Roles: worker, admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Productos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/productos?limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"productos"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "next_token",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Listar productos con paginación SAAI 1.6. Roles: worker, admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Producto",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"coca\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/productos/buscar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"productos",
+								"buscar"
+							]
+						},
+						"description": "Buscar productos por nombre o categoría. Roles: worker, admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Actualizar Producto",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"precio_venta\": 2.80,\n  \"stock\": 150\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/productos/{{codigo_producto}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"productos",
+								"{{codigo_producto}}"
+							]
+						},
+						"description": "Actualizar datos de producto. Roles: worker, admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Eliminar Producto",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/productos/{{codigo_producto}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"productos",
+								"{{codigo_producto}}"
+							]
+						},
+						"description": "Eliminar producto (soft delete: estado=INACTIVO). Roles: worker, admin."
+					},
+					"response": []
+				}
+			],
+			"description": "Gestión de inventario de productos. Roles: worker y admin."
+		},
+		{
+			"name": "4. VENTAS",
+			"item": [
+				{
+					"name": "Calcular Monto Venta",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productos\": [\n    {\n      \"codigo_producto\": \"P001\",\n      \"cantidad\": 3\n    },\n    {\n      \"codigo_producto\": \"P002\",\n      \"cantidad\": 2\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/ventas/calcular",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"ventas",
+								"calcular"
+							]
+						},
+						"description": "Calcular total de venta sin registrar. Verifica stock disponible. Roles: worker, admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Registrar Venta",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('codigo_venta', response.data.codigo_venta);",
+									"    console.log('Venta registrada:', response.data.codigo_venta);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productos\": [\n    {\n      \"codigo_producto\": \"P001\",\n      \"cantidad\": 3\n    },\n    {\n      \"codigo_producto\": \"P002\",\n      \"cantidad\": 2\n    }\n  ],\n  \"metodo_pago\": \"EFECTIVO\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/ventas",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"ventas"
+							]
+						},
+						"description": "Registrar venta. Descuenta stock automáticamente. Genera código V###. Roles: worker, admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Ventas",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/ventas?limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"ventas"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "next_token",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Listar ventas con paginación SAAI 1.6. Roles: worker, admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Venta",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_worker}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fecha_inicio\": \"2025-01-01\",\n  \"fecha_fin\": \"2025-12-31\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/ventas/buscar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"ventas",
+								"buscar"
+							]
+						},
+						"description": "Buscar ventas por rango de fechas, código o estado. Roles: worker, admin."
+					},
+					"response": []
+				}
+			],
+			"description": "Gestión de ventas. Calcula totales, descuenta stock automáticamente. Roles: worker y admin."
+		},
+		{
+			"name": "5. GASTOS",
+			"item": [
+				{
+					"name": "Crear Gasto",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('codigo_gasto', response.data.codigo_gasto);",
+									"    console.log('Gasto registrado:', response.data.codigo_gasto);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"concepto\": \"Alquiler local\",\n  \"monto\": 800.00,\n  \"categoria\": \"FIJOS\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/gastos",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"gastos"
+							]
+						},
+						"description": "Registrar gasto. Categorías: FIJOS, VARIABLES, COMPRAS. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Gastos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/gastos?limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"gastos"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "next_token",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Listar gastos con paginación SAAI 1.6. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Gasto",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"alquiler\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/gastos/buscar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"gastos",
+								"buscar"
+							]
+						},
+						"description": "Buscar gastos por concepto o categoría. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Actualizar Gasto",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"monto\": 850.00\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/gastos/{{codigo_gasto}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"gastos",
+								"{{codigo_gasto}}"
+							]
+						},
+						"description": "Actualizar datos de gasto. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Eliminar Gasto",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/gastos/{{codigo_gasto}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"gastos",
+								"{{codigo_gasto}}"
+							]
+						},
+						"description": "Eliminar gasto (soft delete: estado=INACTIVO). Solo rol admin."
+					},
+					"response": []
+				}
+			],
+			"description": "Gestión de gastos operativos. Solo rol admin tiene acceso."
+		},
+		{
+			"name": "6. ANALYTICS",
+			"item": [
+				{
+					"name": "Actualizar Analítica",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{base_url}}/analitica",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"analitica"
+							]
+						},
+						"description": "Calcular métricas analíticas (ventas, gastos, ganancias, stock). Genera alertas SNS si ganancia < 50 soles o stock bajo < 5. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Ver Analítica",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/analitica",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"analitica"
+							]
+						},
+						"description": "Obtener última analítica calculada. Devuelve métricas operativas. Solo rol admin."
+					},
+					"response": []
+				}
+			],
+			"description": "Analítica operativa en tiempo real. Calcula KPIs, genera alertas automáticas. Solo rol admin."
+		},
+		{
+			"name": "7. REPORTES",
+			"item": [
+				{
+					"name": "Generar Reporte Inventario",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"formato\": \"xlsx\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reportes/inventario",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"reportes",
+								"inventario"
+							]
+						},
+						"description": "Generar reporte Excel de inventario. Incluye stock, valores, categorías. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Generar Reporte Ventas",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fecha_inicio\": \"2025-01-01\",\n  \"fecha_fin\": \"2025-12-31\",\n  \"formato\": \"xlsx\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reportes/ventas",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"reportes",
+								"ventas"
+							]
+						},
+						"description": "Generar reporte Excel de ventas por rango de fechas. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Generar Reporte Gastos",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fecha_inicio\": \"2025-01-01\",\n  \"fecha_fin\": \"2025-12-31\",\n  \"formato\": \"xlsx\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reportes/gastos",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"reportes",
+								"gastos"
+							]
+						},
+						"description": "Generar reporte Excel de gastos por rango de fechas. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Generar Reporte General",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fecha_inicio\": \"2025-01-01\",\n  \"fecha_fin\": \"2025-12-31\",\n  \"formato\": \"xlsx\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reportes/general",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"reportes",
+								"general"
+							]
+						},
+						"description": "Generar reporte Excel consolidado: Dashboard ejecutivo (ingresos, egresos, balance, valor inventario), Inventario, Ventas, Gastos. Solo rol admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Historial Reportes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/reportes/historial?limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"reportes",
+								"historial"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "next_token",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Listar reportes generados con URLs de descarga S3. Solo rol admin."
+					},
+					"response": []
+				}
+			],
+			"description": "Generación de reportes Excel. Sube a S3, guarda metadatos en DynamoDB. Solo rol admin."
+		},
+		{
+			"name": "8. NOTIFICACIONES",
+			"item": [
+				{
+					"name": "Listar Notificaciones",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/notificacion?limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"notificacion"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "next_token",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Listar notificaciones del usuario. Generadas por SNS AlertasSAAI. Solo rol admin."
+					},
+					"response": []
+				}
+			],
+			"description": "Notificaciones push generadas por alertas SNS. Solo rol admin."
+		},
+		{
+			"name": "9. TIENDAS (SAAI)",
+			"item": [
+				{
+					"name": "Registrar Tienda",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('codigo_tienda', response.data.codigo_tienda);",
+									"    pm.collectionVariables.set('tenant_id', response.data.codigo_tienda);",
+									"    console.log('Tienda registrada:', response.data.codigo_tienda);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_saai}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nombre_tienda\": \"Bodega San Juan\",\n  \"email_tienda\": \"bodega@correo.com\",\n  \"telefono\": \"999888777\",\n  \"admin\": {\n    \"nombre\": \"Juan Perez\",\n    \"email\": \"admin@bodega.com\",\n    \"password\": \"123456\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/tiendas",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tiendas"
+							]
+						},
+						"description": "Registrar nueva tienda + admin inicial. Publica SNS BienvenidaSAAI → crea carpeta S3 + suscripción alertas. Solo rol saai."
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Tiendas",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_saai}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/tiendas?limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tiendas"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "next_token",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Listar tiendas con paginación SAAI 1.6. Incluye inactivas. Solo rol saai."
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Tienda",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_saai}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"san juan\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/tiendas/buscar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tiendas",
+								"buscar"
+							]
+						},
+						"description": "Buscar tiendas por nombre, código o email_tienda. Solo rol saai."
+					},
+					"response": []
+				},
+				{
+					"name": "Actualizar Tienda",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_saai}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nombre_tienda\": \"Bodega San Juan Miraflores\",\n  \"telefono\": \"999888666\",\n  \"estado\": \"ACTIVA\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/tiendas/{{codigo_tienda}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tiendas",
+								"{{codigo_tienda}}"
+							]
+						},
+						"description": "Actualizar datos de tienda. Estados: ACTIVA, SUSPENDIDA, ELIMINADA. Solo rol saai."
+					},
+					"response": []
+				},
+				{
+					"name": "Eliminar Tienda",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_saai}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"motivo\": \"Solicitud del cliente\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/tiendas/{{codigo_tienda}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tiendas",
+								"{{codigo_tienda}}"
+							]
+						},
+						"description": "Eliminar tienda (soft delete). Registra motivo_baja, fecha_baja, baja_por (auditoría). Solo rol saai."
+					},
+					"response": []
+				}
+			],
+			"description": "Gestión de tiendas en la plataforma SAAI. Solo rol saai (super admin) tiene acceso."
+		},
+		{
+			"name": "10. WEBSOCKET",
+			"item": [
+				{
+					"name": "Connect WebSocket",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "wss://YOUR-WS-API-GATEWAY-ID.execute-api.us-east-1.amazonaws.com/dev?token={{token_admin}}",
+							"protocol": "wss",
+							"host": [
+								"YOUR-WS-API-GATEWAY-ID",
+								"execute-api",
+								"us-east-1",
+								"amazonaws",
+								"com"
+							],
+							"path": [
+								"dev"
+							],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{token_admin}}"
+								}
+							]
+						},
+						"description": "Conectar a WebSocket para eventos en tiempo real. Requiere token JWT válido."
+					},
+					"response": []
+				}
+			],
+			"description": "WebSocket API para eventos en tiempo real. Recibe notificaciones push de analytics y alertas."
+		}
+	]
+}

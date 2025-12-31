@@ -1,6 +1,7 @@
 # usuarios/actualizar_usuario.py
 import os
 import logging
+from constants import ALLOWED_ROLES
 from utils import (
     success_response,
     error_response,
@@ -83,8 +84,8 @@ def handler(event, context):
         
         if 'role' in body:
             role = str(body['role']).strip().lower()
-            if role not in ['admin', 'worker']:
-                return validation_error_response("Role debe ser 'admin' o 'worker'")
+            if role not in ALLOWED_ROLES:
+                return validation_error_response(f"Role debe ser uno de: {', '.join(ALLOWED_ROLES)}")
             usuario_data['role'] = role
         
         # Actualizar metadatos

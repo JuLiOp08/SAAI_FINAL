@@ -177,10 +177,13 @@ def validar_restricciones_adicionales(payload, method_arn):
         
         # Restricciones por rol
         if rol == 'TRABAJADOR':
-            # TRABAJADOR solo puede acceder a productos y ventas
-            rutas_permitidas = ['/productos', '/ventas', '/notificacion']
-            if not any(path.startswith(ruta) for ruta in rutas_permitidas):
-                logger.warning(f"TRABAJADOR intenta acceder a ruta no permitida: {path}")
+            # TRABAJADOR solo puede acceder a productos y ventas (rutas restringidas desde env var)
+            restricted_paths_str = os.environ.get('RESTRICTED_PATHS_WORKER', '/gastos,/analytics,/reportes')
+            restricted_paths = [p.strip() for p in restricted_paths_str.split(',') if p.strip()]
+            
+            # Verificar si intenta acceder a ruta restringida
+            if any(path.startswith(ruta) for ruta in restricted_paths):
+                logger.warning(f"TRABAJADOR intenta acceder a ruta restringida: {path}")
                 return False
         
         elif rol == 'ADMIN':

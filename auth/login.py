@@ -1,5 +1,6 @@
 # auth/login.py
 import logging
+from constants import ROLE_MAPPING
 from utils import (
     success_response,
     error_response,
@@ -182,12 +183,8 @@ def mapear_rol_api(rol_interno):
     Returns:
         str: Rol en formato API (worker, admin, saai)
     """
-    mapeo = {
-        'TRABAJADOR': 'worker',
-        'ADMIN': 'admin', 
-        'SAAI': 'saai'
-    }
-    return mapeo.get(rol_interno, rol_interno.lower())
+    from constants import ROLE_MAPPING
+    return ROLE_MAPPING.get(rol_interno, rol_interno.lower())
 
 
 def validar_request_login(body):

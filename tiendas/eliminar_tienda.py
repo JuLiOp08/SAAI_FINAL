@@ -14,6 +14,7 @@ from utils import (
     put_item_standard,
     obtener_fecha_hora_peru
 )
+from constants import ESTADO_TIENDA_ELIMINADA
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -47,7 +48,7 @@ def handler(event, context):
         
         # Validar que el usuario sea SAAI
         user_info = extract_user_from_jwt_claims(event)
-        if not user_info or user_info.get('rol') != 'SAAI':
+        if not user_info or user_info.get('rol') != 'saai':
             return error_response("Solo usuarios SAAI pueden eliminar tiendas", 403)
         
         # Obtener código de tienda del path
@@ -65,14 +66,14 @@ def handler(event, context):
             return error_response("Tienda no encontrada", 404)
         
         # Verificar que la tienda no esté ya eliminada
-        if tienda_data.get('estado') == 'ELIMINADA':
+        if tienda_data.get('estado') == ESTADO_TIENDA_ELIMINADA:
             return error_response("La tienda ya está eliminada", 400)
         
         # Realizar eliminación lógica (soft delete)
         fecha_actual = obtener_fecha_hora_peru()
         user_info = extract_user_from_jwt_claims(event)
         
-        tienda_data['estado'] = 'ELIMINADA'
+        tienda_data['estado'] = ESTADO_TIENDA_ELIMINADA
         tienda_data['motivo_baja'] = str(motivo).strip()
         tienda_data['fecha_baja'] = fecha_actual
         tienda_data['baja_por'] = user_info.get('codigo_usuario', 'SAAI_UNKNOWN')

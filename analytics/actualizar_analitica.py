@@ -15,6 +15,7 @@ from utils import (
     put_item_standard,
     get_item_standard
 )
+from constants import THRESHOLD_GANANCIA_BAJA, THRESHOLD_STOCK_BAJO
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -127,14 +128,14 @@ def handler(event, context):
         
         # Alerta: Ganancia baja del día (< 50 soles)
         ventas_hoy = next((v for v in ventas_diarias if v['fecha'] == fecha_str), None)
-        if ventas_hoy and ventas_hoy.get('ingresos', 0) < 50:
+        if ventas_hoy and ventas_hoy.get('ingresos', 0) < THRESHOLD_GANANCIA_BAJA:
             alertas.append({
                 "tipo": "gananciaDiaBaja",
                 "severidad": "INFO",
                 "mensaje": f"Ganancia del día baja: S/ {ventas_hoy['ingresos']:.2f}"
             })
         
-        # Alerta: Producto top sin stock
+        # Alerta: Producto top sin stock o stock bajo
         if productos_top:
             producto_mas_vendido = productos_top[0]
             stock_producto = obtener_stock_producto(tenant_id, producto_mas_vendido['codigo_producto'])
@@ -143,6 +144,12 @@ def handler(event, context):
                     "tipo": "productoTopSinStock",
                     "severidad": "INFO",
                     "mensaje": f"Producto más vendido sin stock: {producto_mas_vendido['nombre']}"
+                })
+            elif stock_producto <= THRESHOLD_STOCK_BAJO:
+                alertas.append({
+                    "tipo": "productoTopStockBajo",
+                    "severidad": "INFO",
+                    "mensaje": f"Producto más vendido con stock bajo: {producto_mas_vendido['nombre']} ({stock_producto} unidades)"
                 })
         
         analitica_data["alertas_detectadas"] = alertas
@@ -191,7 +198,7 @@ def handler(event, context):
             }
             
             lambda_client.invoke(
-                FunctionName=f"saai-{os.environ.get('STAGE', 'dev')}-EmitirEventosWs",
+                FunctionName=os.environ['EMITIR_EVENTOS_WS_FUNCTION_ARN'],
                 InvocationType='Event',  # Async
                 Payload=json.dumps(event_payload)
             )

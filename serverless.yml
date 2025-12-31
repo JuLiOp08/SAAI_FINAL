@@ -49,6 +49,17 @@ provider:
     # JWT
     JWT_SECRET: ${env:JWT_SECRET, 'saai-secret-key-2025'}
     JWT_EXPIRES_IN: 86400 # 24 horas
+    # Restricciones de rutas por rol
+    RESTRICTED_PATHS_WORKER: /gastos,/analytics,/reportes
+    # Lambda ARNs para invocaciones internas
+    EMITIR_EVENTOS_WS_FUNCTION_ARN:
+      Fn::Join:
+        - ":"
+        - - "arn:aws:lambda"
+          - ${self:provider.region}
+          - Ref: AWS::AccountId
+          - "function"
+          - "${self:service}-${self:provider.stage}-EmitirEventosWs"
 
 plugins:
   - serverless-python-requirements

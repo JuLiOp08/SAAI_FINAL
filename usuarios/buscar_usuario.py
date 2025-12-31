@@ -8,7 +8,9 @@ from utils import (
     parse_request_body,
     log_request,
     extract_tenant_from_jwt_claims,
-    query_by_tenant
+    query_by_tenant,
+    extract_pagination_params,
+    create_next_token
 )
 
 logger = logging.getLogger()
@@ -26,6 +28,10 @@ def handler(event, context):
     {
         "body": {
             "query": "juan"
+        },
+        "queryStringParameters": {
+            "limit": 10,
+            "next_token": "..." (opcional)
         }
     }
     
@@ -40,7 +46,8 @@ def handler(event, context):
                     "email": "juan@tienda.com",
                     "role": "worker"
                 }
-            ]
+            ],
+            "next_token": "..." (si hay más resultados)
         }
     }
     """
@@ -63,8 +70,19 @@ def handler(event, context):
         
         query_text = str(query).lower().strip()
         
-        # Obtener todos los usuarios activos de la tienda
-        items = query_by_tenant(USUARIOS_TABLE, tenant_id)
+        # Extraer parámetros de paginación SAAI 1.6
+        limit, next_token = extract_pagination_params(event)
+        
+        # Obtener todos los usuarios activos de la tienda con paginación
+        result = query_by_tenant(
+            USUARIOS_TABLE, 
+            tenant_id,
+            limit=limit,
+            next_token=next_token
+        )
+        
+        items = result.get('items', [])
+        last_evaluated_key = result.get('last_evaluated_key')
         
         # Buscar en nombre, email o código
         usuarios_encontrados = []
@@ -89,9 +107,14 @@ def handler(event, context):
         
         logger.info(f"Usuarios encontrados: {len(usuarios_encontrados)} para query '{query_text}' en tienda {tenant_id}")
         
-        return success_response(
-            data={"usuarios": usuarios_encontrados}
-        )
+        # Preparar response con paginación
+        response_data = {"usuarios": usuarios_encontrados}
+        
+        # Agregar next_token si hay más resultados
+        if last_evaluated_key:
+            response_data['next_token'] = create_next_token(last_evaluated_key)
+        
+        return success_response(data=response_data)
         
     except Exception as e:
         logger.error(f"Error buscando usuarios: {str(e)}")

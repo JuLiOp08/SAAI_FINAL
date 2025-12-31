@@ -1,7 +1,9 @@
 # usuarios/crear_usuario.py
 import os
+import re
 import hashlib
 import logging
+from constants import ALLOWED_ROLES, EMAIL_REGEX
 from utils import (
     success_response,
     error_response,
@@ -75,9 +77,13 @@ def handler(event, context):
         password = str(body['password']).strip()
         role = str(body['role']).strip().lower()
         
-        # Validar rol
-        if role not in ['admin', 'worker']:
-            return validation_error_response("Role debe ser 'admin' o 'worker'")
+        # Validar rol con constants centralizadas
+        if role not in ALLOWED_ROLES:
+            return validation_error_response(f"Role debe ser uno de: {', '.join(ALLOWED_ROLES)}")
+        
+        # Validar formato de email con RFC 5322
+        if not re.match(EMAIL_REGEX, email):
+            return validation_error_response("Email con formato inválido")
         
         # Validar email único en la tienda
         items = query_by_tenant(USUARIOS_TABLE, tenant_id)

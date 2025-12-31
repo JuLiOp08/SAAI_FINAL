@@ -108,25 +108,24 @@ def handler(event, context):
         total_ingresos = 0
         
         for venta in ventas:
-            data = venta['data']
-            total_venta = float(data.get('total', 0))
+            total_venta = float(venta.get('total', 0))
             total_ingresos += total_venta
             
             # Datos de venta individual
             datos_ventas.append({
-                'Código Venta': data.get('codigo_venta', ''),
-                'Fecha': data.get('fecha', ''),  # Ya es solo fecha YYYY-MM-DD
-                'Cliente': data.get('cliente', ''),
+                'Código Venta': venta.get('codigo_venta', ''),
+                'Fecha': venta.get('fecha', ''),  # Ya es solo fecha YYYY-MM-DD
+                'Cliente': venta.get('cliente', ''),
                 'Total': total_venta,
-                'Método Pago': data.get('metodo_pago', ''),
-                'Cantidad Items': len(data.get('productos', [])),
-                'Vendedor': data.get('codigo_usuario', ''),
-                'Estado': data.get('estado', 'COMPLETADA'),
-                'Fecha Registro': data.get('created_at', '')[:10] if data.get('created_at') else ''
+                'Método Pago': venta.get('metodo_pago', ''),
+                'Cantidad Items': len(venta.get('productos', [])),
+                'Vendedor': venta.get('codigo_usuario', ''),
+                'Estado': venta.get('estado', 'COMPLETADA'),
+                'Fecha Registro': venta.get('created_at', '')[:10] if venta.get('created_at') else ''
             })
             
             # Acumular productos vendidos
-            for producto in data.get('productos', []):  # Cambiar de 'items' a 'productos'
+            for producto in venta.get('productos', []):  # Cambiar de 'items' a 'productos'
                 codigo = producto.get('codigo_producto', '')
                 nombre = producto.get('nombre_producto', codigo)  # Cambiar de 'nombre' a 'nombre_producto'
                 cantidad = int(producto.get('cantidad', 0))
@@ -209,7 +208,7 @@ def handler(event, context):
         excel_buffer.seek(0)
         
         # Subir a S3
-        fecha_str = lima_now.strftime('%Y%m%d_%H%M%S')
+        fecha_str = fecha_actual[:10].replace('-', '') + '_' + fecha_actual[11:19].replace(':', '')
         s3_key = f"{tenant_id}/reportes/ventas_{codigo_reporte}_{fecha_str}.xlsx"
         
         s3_client.put_object(
