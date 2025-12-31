@@ -245,16 +245,18 @@ def options_response():
         "body": ""
     }
 
-def log_request(event, context):
+def log_request(event, context=None):
     """
     Registra información de la request para debugging
     
     Args:
         event (dict): Evento de Lambda
-        context: Contexto de Lambda
+        context (optional): Contexto de Lambda (opcional para compatibilidad)
     """
-    logger.info(f"Request ID: {context.aws_request_id}")
-    logger.info(f"Function: {context.function_name}")
+    if context:
+        logger.info(f"Request ID: {context.aws_request_id}")
+        logger.info(f"Function: {context.function_name}")
+    
     logger.info(f"Method: {event.get('httpMethod', 'UNKNOWN')}")
     logger.info(f"Path: {event.get('path', 'UNKNOWN')}")
     

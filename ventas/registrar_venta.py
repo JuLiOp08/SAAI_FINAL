@@ -14,9 +14,9 @@ from utils import (
     extract_user_from_jwt_claims,
     get_item_standard,
     put_item_standard,
-    increment_counter,
     obtener_fecha_hora_peru,
-    decimal_to_float
+    decimal_to_float,
+    generar_codigo_venta
 )
 
 logger = logging.getLogger()
@@ -36,6 +36,7 @@ WEBSOCKET_API_ENDPOINT = os.environ.get('WEBSOCKET_API_ENDPOINT')
 # Inicializar clientes AWS
 sns = boto3.client('sns')
 apigateway = boto3.client('apigatewaymanagementapi', endpoint_url=WEBSOCKET_API_ENDPOINT)
+lambda_client = boto3.client('lambda')
 
 def handler(event, context):
     """
@@ -46,7 +47,7 @@ def handler(event, context):
     {
         "body": {
             "cliente": "Juan Pérez",
-            "items": [
+            "productos": [
                 {
                     "codigo_producto": "P001",
                     "cantidad": 2
@@ -89,24 +90,24 @@ def handler(event, context):
         
         # Validar campos obligatorios
         cliente = body.get('cliente')
-        items = body.get('items')
+        productos = body.get('productos')
         metodo_pago = body.get('metodo_pago')
         
         if not cliente:
             return validation_error_response("Cliente es obligatorio")
         
-        if not items or not isinstance(items, list) or len(items) == 0:
-            return validation_error_response("Items es obligatorio y debe ser una lista no vacía")
+        if not productos or not isinstance(productos, list) or len(productos) == 0:
+            return validation_error_response("Productos es obligatorio y debe ser una lista no vacía")
         
         if not metodo_pago:
             return validation_error_response("Metodo de pago es obligatorio")
         
-        # Validar items y calcular totales (similar a calcular_monto)
+        # Validar productos y calcular totales (similar a calcular_monto)
         total_subtotal = Decimal('0.00')
-        items_procesados = []
+        productos_procesados = []
         productos_a_actualizar = []
         
-        for item in items:
+        for item in productos:
             codigo_producto = item.get('codigo_producto')
             cantidad = item.get('cantidad')
             
@@ -121,19 +122,19 @@ def handler(event, context):
                 return validation_error_response("La cantidad debe ser un número entero válido")
             
             # Obtener producto
-            producto = get_item_standard(PRODUCTOS_TABLE, tenant_id, codigo_producto)
-            if not producto or producto.get('estado') != 'ACTIVO':
+            producto_data = get_item_standard(PRODUCTOS_TABLE, tenant_id, codigo_producto)
+            if not producto_data or producto_data.get('estado') != 'ACTIVO':
                 return error_response(f"Producto {codigo_producto} no encontrado o inactivo", 404)
             
             # Verificar stock disponible
-            stock_actual = int(producto.get('stock', 0))
+            stock_actual = int(producto_data.get('stock', 0))
             if stock_actual < cantidad:
                 return error_response(
                     f"Stock insuficiente para producto {codigo_producto}. Disponible: {stock_actual}, Solicitado: {cantidad}",
                     400
                 )
             
-            precio_unitario = producto.get('precio', Decimal('0.00'))
+            precio_unitario = producto_data.get('precio', Decimal('0.00'))
             if isinstance(precio_unitario, (int, float)):
                 precio_unitario = Decimal(str(precio_unitario))
             
@@ -141,19 +142,19 @@ def handler(event, context):
             subtotal_item = precio_unitario * Decimal(str(cantidad))
             total_subtotal += subtotal_item
             
-            # Preparar item procesado
-            item_procesado = {
+            # Preparar producto procesado
+            producto_procesado = {
                 'codigo_producto': codigo_producto,
-                'nombre_producto': producto.get('nombre'),
+                'nombre_producto': producto_data.get('nombre'),
                 'precio_unitario': precio_unitario,
                 'cantidad': cantidad,
                 'subtotal_item': subtotal_item
             }
             
-            items_procesados.append(item_procesado)
+            productos_procesados.append(producto_procesado)
             
             # Preparar actualización de stock
-            producto_actualizado = producto.copy()
+            producto_actualizado = producto_data.copy()
             producto_actualizado['stock'] = stock_actual - cantidad
             producto_actualizado['updated_at'] = obtener_fecha_hora_peru()
             if codigo_usuario:
@@ -161,14 +162,11 @@ def handler(event, context):
             
             productos_a_actualizar.append((codigo_producto, producto_actualizado))
         
-        # Calcular IGV y total
-        igv_rate = Decimal('0.18')
-        igv = total_subtotal * igv_rate
-        total = total_subtotal + igv
+        # Calcular total (sin IGV según documentación oficial SAAI)
+        total = total_subtotal
         
-        # Generar código de venta
-        contador = increment_counter(COUNTERS_TABLE, tenant_id, "VENTAS")
-        codigo_venta = f"V{contador:03d}"
+        # Generar código de venta usando función de utils
+        codigo_venta = generar_codigo_venta(tenant_id)
         
         # Crear entidad venta
         fecha_actual = obtener_fecha_hora_peru()
@@ -176,19 +174,17 @@ def handler(event, context):
         venta_data = {
             'codigo_venta': codigo_venta,
             'cliente': str(cliente).strip(),
-            'items': [
+            'productos': [  # Cambiar de 'items' a 'productos'
                 {
-                    'codigo_producto': item['codigo_producto'],
-                    'nombre_producto': item['nombre_producto'],
-                    'precio_unitario': item['precio_unitario'],
-                    'cantidad': item['cantidad'],
-                    'subtotal_item': item['subtotal_item']
+                    'codigo_producto': producto['codigo_producto'],
+                    'nombre_producto': producto['nombre_producto'],
+                    'precio_unitario': producto['precio_unitario'],
+                    'cantidad': producto['cantidad'],
+                    'subtotal_item': producto['subtotal_item']
                 }
-                for item in items_procesados
+                for producto in productos_procesados
             ],
-            'subtotal': total_subtotal,
-            'igv': igv,
-            'total': total,
+            'total': total,  # Solo total, sin IGV
             'metodo_pago': str(metodo_pago).strip(),
             'fecha': obtener_fecha_hora_peru()[:10],  # Solo fecha YYYY-MM-DD
             'estado': 'COMPLETADA',
@@ -243,23 +239,44 @@ def handler(event, context):
         except Exception as sns_error:
             logger.warning(f"Error enviando notificación SNS: {str(sns_error)}")
         
-        # Enviar notificación WebSocket (intentar)
+        # Enviar evento WebSocket en tiempo real
         try:
-            if WEBSOCKET_API_ENDPOINT:
-                websocket_message = {
-                    'type': 'nueva_venta',
-                    'codigo_tienda': tenant_id,
+            # Invocar función emitir_eventos_ws para broadcasting
+            lambda_client = boto3.client('lambda')
+            
+            event_payload = {
+                'tenant_id': tenant_id,
+                'event_type': 'venta_registrada',
+                'payload': {
                     'codigo_venta': codigo_venta,
-                    'total': decimal_to_float(total),
                     'cliente': cliente,
-                    'timestamp': fecha_actual
+                    'total': decimal_to_float(total),
+                    'items_count': len(productos_procesados),
+                    'metodo_pago': metodo_pago,
+                    'trabajador': codigo_usuario or 'SISTEMA',
+                    'fecha': fecha_actual,
+                    'productos_vendidos': [
+                        {
+                            'codigo': producto['codigo_producto'],
+                            'nombre': producto['nombre_producto'],
+                            'cantidad': producto['cantidad'],
+                            'subtotal': decimal_to_float(producto['subtotal_item'])
+                        }
+                        for producto in productos_procesados
+                    ]
                 }
-                
-                # Note: En un entorno real, aquí enviaríamos a conexiones activas del WebSocket
-                logger.info(f"WebSocket message prepared for venta {codigo_venta}")
+            }
+            
+            lambda_client.invoke(
+                FunctionName=f"saai-{os.environ.get('STAGE', 'dev')}-EmitirEventosWs",
+                InvocationType='Event',  # Async
+                Payload=json.dumps(event_payload)
+            )
+            
+            logger.info(f"Evento WebSocket 'venta_registrada' enviado para {codigo_venta}")
                 
         except Exception as ws_error:
-            logger.warning(f"Error preparando notificación WebSocket: {str(ws_error)}")
+            logger.warning(f"Error enviando evento WebSocket: {str(ws_error)}")
         
         logger.info(f"Venta registrada: {codigo_venta} en tienda {tenant_id}. Total: {decimal_to_float(total)}")
         
@@ -267,7 +284,8 @@ def handler(event, context):
             message="Venta registrada",
             data={
                 "codigo_venta": codigo_venta,
-                "total": decimal_to_float(total)
+                "total": decimal_to_float(total),
+                "fecha": fecha_actual
             }
         )
         

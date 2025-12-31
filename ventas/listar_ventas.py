@@ -9,7 +9,8 @@ from utils import (
     extract_tenant_from_jwt_claims,
     query_by_tenant,
     decimal_to_float,
-    paginate_results
+    extract_pagination_params,
+    create_next_token
 )
 
 logger = logging.getLogger()
@@ -51,19 +52,21 @@ def handler(event, context):
         if not tenant_id:
             return error_response("Token inválido - no se encontró codigo_tienda", 401)
         
+        # Extraer parámetros de paginación SAAI 1.6
+        pagination = extract_pagination_params(event, default_limit=50, max_limit=100)
+        
         # Parse query parameters
         query_params = event.get('queryStringParameters') or {}
         
-        # Obtener todas las ventas activas
+        # Obtener todas las ventas activas con paginación
         ventas_response = query_by_tenant(
             VENTAS_TABLE,
             tenant_id,
-            filter_expression="attribute_exists(#data) AND #data.estado = :estado",
-            expression_attribute_names={"#data": "data"},
-            expression_attribute_values={":estado": "COMPLETADA"}
+            limit=pagination['limit'],
+            last_evaluated_key=pagination.get('exclusive_start_key')
         )
         
-        ventas = ventas_response.get('Items', [])
+        ventas = ventas_response.get('items', [])
         
         # Aplicar filtros opcionales
         fecha_inicio = query_params.get('fecha_inicio')
@@ -71,8 +74,11 @@ def handler(event, context):
         cliente_filter = query_params.get('cliente')
         
         filtered_ventas = []
-        for item in ventas:
-            venta_data = item.get('data', {})
+        for venta_data in ventas:
+            
+            # Filtro por estado (solo ventas COMPLETADAS)
+            if venta_data.get('estado') != 'COMPLETADA':
+                continue
             
             # Filtro por rango de fechas
             if fecha_inicio and venta_data.get('fecha', '') < fecha_inicio:
@@ -98,18 +104,18 @@ def handler(event, context):
         # Ordenar por fecha descendente (más recientes primero)
         filtered_ventas.sort(key=lambda x: x.get('fecha', ''), reverse=True)
         
-        # Aplicar paginación
-        limit = int(query_params.get('limit', 50))
-        last_key = query_params.get('last_evaluated_key')
+        # Preparar response según SAAI oficial
+        response_data = {'ventas': filtered_ventas}
         
-        paginated_response = paginate_results(filtered_ventas, limit, last_key)
+        # Agregar next_token si hay más páginas
+        if ventas_response.get('last_evaluated_key'):
+            next_token = create_next_token(ventas_response['last_evaluated_key'])
+            if next_token:
+                response_data['next_token'] = next_token
         
-        logger.info(f"Listadas {len(paginated_response['data'])} ventas para tienda {tenant_id}")
+        logger.info(f"Listadas {len(filtered_ventas)} ventas para tienda {tenant_id}")
         
-        return success_response(
-            data=paginated_response['data'],
-            pagination=paginated_response['pagination']
-        )
+        return success_response(data=response_data)
         
     except Exception as e:
         logger.error(f"Error listando ventas: {str(e)}")

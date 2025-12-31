@@ -1,0 +1,608 @@
+SAAI BACKEND - RESUMEN COMPLETO DE UTILS
+==========================================
+
+Este archivo contiene un resumen completo de todas las funciones, clases y constantes
+disponibles en el módulo utils/ del proyecto SAAI. 
+
+Actualizado: 31 de diciembre de 2025 - Última revisión
+Últimos cambios:
+- Agregada función decimal_to_float() en dynamodb_utils.py
+- Corregida firma de log_request() (context ahora es opcional)
+- Actualizados exports de pagination_utils con funciones reales
+- Eliminados imports fantasma que no existían
+
+ESTRUCTURA DE ARCHIVOS
+======================
+utils/
+├── __init__.py           - Exportaciones principales y constantes globales
+├── datetime_utils.py     - Manejo de fechas y horas en zona horaria de Perú
+├── response_utils.py     - Formateo de respuestas HTTP estándar  
+├── dynamodb_utils.py     - Operaciones DynamoDB con modelo estándar
+├── code_generator.py     - Generación de códigos únicos para entidades
+├── jwt_utils.py          - Manejo de tokens JWT y autenticación
+└── pagination_utils.py   - Paginación para APIs REST
+
+═══════════════════════════════════════════════════════════════════════════════
+1. __init__.py - EXPORTACIONES Y CONSTANTES GLOBALES
+═══════════════════════════════════════════════════════════════════════════════
+
+IMPORTACIONES EXPORTADAS:
+-------------------------
+Todas estas funciones se pueden importar directamente con: from utils import function_name
+
+DATETIME_UTILS:
+- obtener_fecha_hora_peru()
+- obtener_solo_fecha_peru() 
+- obtener_timestamp_peru()
+- formatear_fecha_legible()
+- es_fecha_valida()
+- obtener_inicio_dia_peru()
+- obtener_fin_dia_peru()
+- calcular_diferencia_dias()
+- obtener_rango_semana_actual()
+- obtener_rango_mes_actual()
+- validar_formato_fecha()
+
+RESPONSE_UTILS:
+- success_response()
+- error_response()
+- validation_error_response()
+- unauthorized_response()
+- forbidden_response()
+- not_found_response()
+- conflict_response()
+- parse_request_body()
+- get_path_parameter()
+- get_query_parameter()
+- get_header()
+- options_response()
+- log_request()
+- extract_tenant_from_jwt_claims()
+- extract_user_from_jwt_claims()
+
+DYNAMODB_UTILS:
+- put_item_standard()
+- get_item_standard()
+- update_item_standard()
+- delete_item_standard()
+- query_by_tenant()
+- query_by_tenant_with_filter()
+- increment_counter()
+- batch_write_items()
+- get_table()
+- decimal_to_float()
+
+CODE_GENERATOR:
+- generar_codigo_tienda()
+- generar_codigo_usuario()
+- generar_codigo_producto()
+- generar_codigo_venta()
+- generar_codigo_gasto()
+- generar_codigo_reporte()
+- generar_codigo_notificacion()
+- generar_codigo_analitica()
+- generar_codigo_prediccion()
+- generar_password_temporal()
+- generar_token_recuperacion()
+- validar_formato_codigo_tienda()
+- validar_formato_codigo_usuario()
+- extraer_codigo_tienda_de_entidad()
+- generar_codigo_siguiente()
+
+JWT_UTILS:
+- generar_token_jwt()
+- verificar_token_jwt()
+- obtener_scope_por_rol()
+- validar_scope_requerido()
+- extraer_token_de_header()
+- generar_claims_authorizer()
+- token_expira_pronto()
+- renovar_token_si_es_necesario()
+- validar_token_en_base_datos()
+
+PAGINATION_UTILS:
+- extract_pagination_params()  # Extrae limit y next_token de querystring
+- create_next_token()          # Codifica LastEvaluatedKey a base64
+- decode_next_token()          # Decodifica next_token a LastEvaluatedKey
+
+CONSTANTES GLOBALES:
+--------------------
+__version__ = "1.0.0"
+TIMEZONE_PERU = "America/Lima"
+JWT_ALGORITHM = "HS256"
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
+
+STATUS_CODES = {
+    'SUCCESS': 200, 'CREATED': 201, 'BAD_REQUEST': 400,
+    'UNAUTHORIZED': 401, 'FORBIDDEN': 403, 'NOT_FOUND': 404,
+    'CONFLICT': 409, 'INTERNAL_ERROR': 500
+}
+
+ROLES_VALIDOS = ['TRABAJADOR', 'ADMIN', 'SAAI']
+ESTADOS_ENTIDAD = ['ACTIVO', 'INACTIVO']
+TIPOS_REPORTE = ['INV', 'VEN', 'GAS', 'GEN']
+METODOS_PAGO = ['EFECTIVO', 'TARJETA', 'YAPE', 'PLIN', 'TRANSFERENCIA']
+
+CATEGORIAS_GASTO = [
+    'SERVICIOS', 'SUMINISTROS', 'EQUIPAMIENTO', 'MANTENIMIENTO',
+    'MARKETING', 'PERSONAL', 'OTROS'
+]
+
+CATEGORIAS_PRODUCTO = [
+    'ALIMENTOS', 'BEBIDAS', 'LIMPIEZA', 'HIGIENE', 'ELECTRODOMESTICOS',
+    'TECNOLOGIA', 'ROPA', 'OTROS'
+]
+
+FUNCIONES DE VALIDACIÓN:
+------------------------
+- validar_rol(rol) → bool
+- validar_estado(estado) → bool
+- validar_metodo_pago(metodo) → bool
+- validar_categoria_gasto(categoria) → bool
+- validar_categoria_producto(categoria) → bool
+
+═══════════════════════════════════════════════════════════════════════════════
+2. datetime_utils.py - MANEJO DE FECHAS Y HORAS
+═══════════════════════════════════════════════════════════════════════════════
+
+CONSTANTE:
+----------
+PERU_TIMEZONE = timezone(timedelta(hours=-5))
+
+FUNCIONES DISPONIBLES:
+----------------------
+
+obtener_fecha_hora_peru() → str
+    Retorna fecha y hora actual en zona horaria de Perú (UTC-5) en formato ISO 8601
+
+obtener_solo_fecha_peru() → str
+    Retorna solo la fecha actual en formato YYYY-MM-DD
+
+obtener_timestamp_peru() → int
+    Retorna timestamp unix de la fecha/hora actual de Perú
+
+formatear_fecha_legible(fecha_iso) → str
+    Convierte fecha ISO a formato legible "DD/MM/YYYY HH:mm"
+    Args: fecha_iso (str): Fecha en formato ISO 8601
+
+es_fecha_valida(fecha_str) → bool
+    Valida si una fecha está en formato correcto
+    Args: fecha_str (str): Fecha a validar
+
+obtener_inicio_dia_peru(fecha_iso=None) → str
+    Retorna inicio del día (00:00:00) en zona horaria de Perú
+    Args: fecha_iso (str, optional): Fecha específica
+
+obtener_fin_dia_peru(fecha_iso=None) → str
+    Retorna fin del día (23:59:59) en zona horaria de Perú
+    Args: fecha_iso (str, optional): Fecha específica
+
+calcular_diferencia_dias(fecha1_iso, fecha2_iso) → int
+    Calcula diferencia en días entre dos fechas
+    Args: fecha1_iso (str), fecha2_iso (str): Fechas en formato ISO
+
+obtener_rango_semana_actual() → tuple
+    Retorna (inicio_semana_iso, fin_semana_iso) de lunes a domingo
+
+obtener_rango_mes_actual() → tuple
+    Retorna (inicio_mes_iso, fin_mes_iso) del mes actual
+
+validar_formato_fecha(fecha_str, formato='%Y-%m-%d') → bool
+    Valida si fecha cumple formato específico
+    Args: fecha_str (str), formato (str): Formato esperado
+
+═══════════════════════════════════════════════════════════════════════════════
+3. response_utils.py - FORMATEO DE RESPUESTAS HTTP
+═══════════════════════════════════════════════════════════════════════════════
+
+FUNCIONES DISPONIBLES:
+----------------------
+
+success_response(data=None, mensaje="Operación exitosa", status_code=200) → dict
+    Genera respuesta HTTP exitosa siguiendo formato SAAI
+    Estructura: {"success": true, "message": str, "data": dict}
+
+error_response(mensaje="Error interno del servidor", detalles=None, status_code=500) → dict
+    Genera respuesta HTTP de error siguiendo formato SAAI
+    Estructura: {"success": false, "message": str, "data": dict}
+
+validation_error_response(errores_validacion) → dict
+    Respuesta HTTP para errores de validación (400)
+    Args: errores_validacion (dict): Diccionario con errores
+
+unauthorized_response(mensaje="Token inválido o expirado") → dict
+    Respuesta HTTP 401 para errores de autenticación
+
+forbidden_response(mensaje="No tienes permisos para realizar esta acción") → dict
+    Respuesta HTTP 403 para errores de autorización
+
+not_found_response(mensaje="Recurso no encontrado") → dict
+    Respuesta HTTP 404 para recursos no encontrados
+
+conflict_response(mensaje="Conflicto con el estado actual del recurso") → dict
+    Respuesta HTTP 409 para conflictos
+
+parse_request_body(event) → dict
+    Parsea el body de una request HTTP
+    Args: event (dict): Evento de Lambda
+
+get_path_parameter(event, parameter_name) → str|None
+    Extrae parámetro de la ruta
+    Args: event (dict), parameter_name (str)
+
+get_query_parameter(event, parameter_name, default_value=None) → str
+    Extrae parámetro de query string
+    Args: event (dict), parameter_name (str), default_value
+
+get_header(event, header_name) → str|None
+    Extrae header de la request (case-insensitive)
+    Args: event (dict), header_name (str)
+
+options_response() → dict
+    Genera respuesta para preflight CORS (OPTIONS)
+
+log_request(event, context=None) → None
+    Registra información de la request para debugging
+    Args: event (dict), context (optional): Contexto de Lambda (opcional para compatibilidad)
+
+extract_tenant_from_jwt_claims(event) → str|None
+    Extrae tenant_id de los claims JWT agregados por el authorizer
+    Args: event (dict): Evento con requestContext
+
+extract_user_from_jwt_claims(event) → dict|None
+    Extrae información del usuario de los claims JWT
+    Retorna: {'codigo_usuario': str, 'rol': str, 'tenant_id': str}
+
+═══════════════════════════════════════════════════════════════════════════════
+4. dynamodb_utils.py - OPERACIONES DYNAMODB
+═══════════════════════════════════════════════════════════════════════════════
+
+CLIENTE GLOBAL:
+---------------
+dynamodb = boto3.resource('dynamodb')
+
+FUNCIONES DISPONIBLES:
+----------------------
+
+get_table(table_name) → Table
+    Obtiene instancia de tabla DynamoDB
+    Args: table_name (str): Nombre de la tabla
+
+put_item_standard(table_name, tenant_id, entity_id, data) → bool
+    Inserta item usando modelo estándar SAAI: tenant_id + entity_id + data
+    Auto-agrega created_at y updated_at
+    Args: table_name (str), tenant_id (str), entity_id (str), data (dict)
+
+get_item_standard(table_name, tenant_id, entity_id) → dict|None
+    Obtiene item usando modelo estándar SAAI
+    Retorna solo la data, no las keys
+    Args: table_name (str), tenant_id (str), entity_id (str)
+
+update_item_standard(table_name, tenant_id, entity_id, data_updates) → bool
+    Actualiza item usando modelo estándar SAAI
+    Mergea datos actuales con updates, auto-agrega updated_at
+    Args: table_name (str), tenant_id (str), entity_id (str), data_updates (dict)
+
+delete_item_standard(table_name, tenant_id, entity_id, soft_delete=True) → bool
+    Elimina item. Por defecto usa soft delete (estado=INACTIVO)
+    Args: table_name (str), tenant_id (str), entity_id (str), soft_delete (bool)
+
+query_by_tenant(table_name, tenant_id, filter_expression=None, limit=None, last_evaluated_key=None, include_inactive=False) → dict
+    Consulta todos los items de un tenant con paginación
+    IMPORTANTE: Filtra automáticamente registros INACTIVOS por defecto
+    Retorna: {'items': [...], 'last_evaluated_key': ..., 'count': int, 'scanned_count': int}
+    Nota: Los items incluyen _tenant_id y _entity_id para identificación
+
+query_by_tenant_with_filter(table_name, tenant_id, filter_conditions, limit=None, last_evaluated_key=None, include_inactive=False) → dict
+    Consulta items de tenant con filtros específicos en la data
+    Args: filter_conditions (dict): Condiciones de filtro con operadores especiales:
+    - {'field': 'value'} → igualdad simple
+    - {'field': {'contains': 'text'}} → contiene texto
+    - {'field': {'begins_with': 'prefix'}} → comienza con
+    - {'field': {'between': [min, max]}} → entre valores
+    - {'field': {'gt': value}} → mayor que
+    - {'field': {'gte': value}} → mayor o igual
+    - {'field': {'lt': value}} → menor que
+    - {'field': {'lte': value}} → menor o igual
+
+increment_counter(table_name, tenant_id, counter_name, increment=1) → int|None
+    Incrementa contador atómicamente
+    Args: table_name (str), tenant_id (str), counter_name (str), increment (int)
+    Retorna: Nuevo valor del contador
+
+batch_write_items(table_name, items) → bool
+    Inserta múltiples items en batch (máximo 25 por batch automático)
+    Args: table_name (str), items (list): Lista de items completos
+
+decimal_to_float(value) → float
+    Convierte valores Decimal de DynamoDB a float para JSON serialization
+    Necesario porque DynamoDB retorna números como Decimal, pero JSON no los soporta
+    Maneja: Decimal, int, float, str, None (retorna 0.0 si es None)
+    Args: value: Valor a convertir (puede ser Decimal, int, float, str, None)
+
+═══════════════════════════════════════════════════════════════════════════════
+5. code_generator.py - GENERACIÓN DE CÓDIGOS ÚNICOS
+═══════════════════════════════════════════════════════════════════════════════
+
+FUNCIONES DISPONIBLES:
+----------------------
+
+generar_codigo_tienda() → str
+    Genera código único para tienda en formato T### (T001, T002, etc.)
+    Usa tabla de contadores SAAI, fallback a random si no disponible
+
+generar_codigo_usuario(codigo_tienda) → str
+    Genera código único para usuario: {codigo_tienda}U### (T001U001, T002U015)
+    Args: codigo_tienda (str)
+
+generar_codigo_producto(codigo_tienda) → str
+    Genera código único para producto: {codigo_tienda}P### (T001P001, T002P050)
+    Args: codigo_tienda (str)
+
+generar_codigo_venta(codigo_tienda) → str
+    Genera código único para venta: {codigo_tienda}V### (T001V001, T002V025)
+    Args: codigo_tienda (str)
+
+generar_codigo_gasto(codigo_tienda) → str
+    Genera código único para gasto: {codigo_tienda}G### (T001G001, T002G010)
+    Args: codigo_tienda (str)
+
+generar_codigo_reporte(codigo_tienda, tipo_reporte) → str
+    Genera código único para reporte: {codigo_tienda}R{tipo}{timestamp}
+    Ejemplo: T001RINV20250115143022, T002RVEN20250115143022
+    Args: codigo_tienda (str), tipo_reporte (str): 'INV', 'VEN', 'GAS', 'GEN'
+
+generar_codigo_notificacion(codigo_tienda) → str
+    Genera código único para notificación: {codigo_tienda}N### (T001N001, T002N025)
+    Usa contador incremental para consistencia con el patrón del proyecto
+    Fallback a timestamp en caso de error con contadores
+    Args: codigo_tienda (str)
+
+generar_codigo_analitica(codigo_tienda) → str
+    Genera código único para analítica: {codigo_tienda}A{fecha}
+    Ejemplo: T001A20250115
+    Args: codigo_tienda (str)
+
+generar_codigo_prediccion(codigo_tienda, codigo_producto) → str
+    Genera código único para predicción: {codigo_tienda}PRED{codigo_producto}{fecha}
+    Args: codigo_tienda (str), codigo_producto (str)
+
+generar_password_temporal() → str
+    Genera contraseña temporal de 8 caracteres (letras + números)
+
+generar_token_recuperacion() → str
+    Genera token para recuperación de contraseña de 16 caracteres (mayúsculas + números)
+
+validar_formato_codigo_tienda(codigo) → bool
+    Valida formato T### donde ### es 001-999
+    Args: codigo (str)
+
+validar_formato_codigo_usuario(codigo, codigo_tienda=None) → bool
+    Valida formato {tienda}U### (ej: T001U005)
+    Args: codigo (str), codigo_tienda (str, optional): Para validar tienda específica
+
+extraer_codigo_tienda_de_entidad(codigo_entidad) → str|None
+    Extrae código de tienda de cualquier código de entidad
+    Args: codigo_entidad (str): ej T001U005, T002P010
+    Retorna: Código de tienda (T001, T002) o None
+
+generar_codigo_siguiente(contador_actual, prefijo, codigo_tienda="") → str
+    Genera siguiente código basado en contador
+    Args: contador_actual (int), prefijo (str): 'U','P','V','G', codigo_tienda (str)
+
+═══════════════════════════════════════════════════════════════════════════════
+6. jwt_utils.py - MANEJO DE TOKENS JWT Y AUTENTICACIÓN
+═══════════════════════════════════════════════════════════════════════════════
+
+CONFIGURACIÓN:
+--------------
+JWT_SECRET = os.environ.get('JWT_SECRET', 'saai-secret-key-2025')
+JWT_ALGORITHM = 'HS256'
+JWT_EXPIRES_IN = int(os.environ.get('JWT_EXPIRES_IN', 86400))  # 24 horas
+
+FUNCIONES DISPONIBLES:
+----------------------
+
+generar_token_jwt(codigo_usuario, codigo_tienda, rol, datos_adicionales=None) → str|None
+    Genera token JWT con claims necesarios para SAAI
+    Claims incluidos: iss, iat, exp, aud, codigo_usuario, tenant_id, rol, scope, timezone, generated_at, version
+    Args: codigo_usuario (str), codigo_tienda (str), rol (str: 'TRABAJADOR'|'ADMIN'|'SAAI'), datos_adicionales (dict, optional)
+
+verificar_token_jwt(token) → dict|None
+    Verifica y decodifica token JWT
+    Valida campos obligatorios: codigo_usuario, tenant_id, rol
+    Maneja automáticamente 'Bearer ' prefix
+    Args: token (str)
+
+obtener_scope_por_rol(rol) → list
+    Retorna lista de scopes/permisos según rol
+    TRABAJADOR: productos:read/write, ventas:read/write, notificaciones:read
+    ADMIN: todos los anteriores + usuarios, gastos, analitica, reportes, predicciones
+    SAAI: tiendas:read/write, usuarios:read/write, notificaciones:read, sistema:admin
+
+validar_scope_requerido(payload, scope_requerido) → bool
+    Valida si usuario tiene scope específico
+    Args: payload (dict): Payload del JWT, scope_requerido (str)
+
+extraer_token_de_header(auth_header) → str|None
+    Extrae token del header Authorization
+    Maneja 'Bearer ' prefix automáticamente
+    Args: auth_header (str)
+
+generar_claims_authorizer(payload) → dict
+    Genera claims que authorizer debe pasar al Lambda
+    Retorna: {codigo_usuario, tenant_id, rol, scope, generated_at, version}
+    Args: payload (dict): Payload del JWT decodificado
+
+token_expira_pronto(payload, minutos_threshold=30) → bool
+    Verifica si token expira pronto
+    Args: payload (dict), minutos_threshold (int): minutos antes de considerar "pronto"
+
+renovar_token_si_es_necesario(token, minutos_threshold=30) → str|None
+    Renueva token si está próximo a expirar
+    Args: token (str), minutos_threshold (int)
+
+validar_token_en_base_datos(token, tabla_tokens, tenant_id, codigo_usuario) → bool
+    Valida si token existe y está activo en base de datos
+    Verifica: coincidencia de token, estado ACTIVO, no expirado
+    Args: token (str), tabla_tokens (str), tenant_id (str), codigo_usuario (str)
+
+═══════════════════════════════════════════════════════════════════════════════
+7. pagination_utils.py - PAGINACIÓN PARA APIs REST
+═══════════════════════════════════════════════════════════════════════════════
+
+FUNCIONES DISPONIBLES:
+----------------------
+
+create_next_token(last_evaluated_key) → str|None
+    Crea next_token desde LastEvaluatedKey de DynamoDB
+    Codifica en base64 según documentación SAAI oficial 1.6
+    Args: last_evaluated_key (dict): LastEvaluatedKey de DynamoDB
+
+decode_next_token(next_token) → dict|None
+    Decodifica next_token a LastEvaluatedKey para DynamoDB
+    Args: next_token (str): Token codificado
+
+extract_pagination_params(event, default_limit=50, max_limit=100) → dict
+    Extrae parámetros de paginación según SAAI oficial:
+    - limit (querystring)
+    - next_token (querystring)
+    Args: event (dict): Evento de Lambda, default_limit (int), max_limit (int)
+    Retorna: {'limit': int, 'exclusive_start_key': dict}
+
+NOTA: Estas son las Únicas 3 funciones reales de pagination_utils.
+Los imports fantasma fueron removidos de __init__.py.
+
+═══════════════════════════════════════════════════════════════════════════════
+FUNCIONES MÁS UTILIZADAS EN EL PROYECTO
+═══════════════════════════════════════════════════════════════════════════════
+
+CRÍTICAS (Usar siempre):
+- extract_tenant_from_jwt_claims(event) - Para obtener tenant_id del JWT
+- success_response(data=data) - Para respuestas exitosas 
+- error_response(mensaje, status_code) - Para respuestas de error
+- put_item_standard(table, tenant_id, entity_id, data) - Para insertar
+- get_item_standard(table, tenant_id, entity_id) - Para obtener
+- query_by_tenant(table, tenant_id) - Para listar (filtra INACTIVOS automáticamente)
+- obtener_fecha_hora_peru() - Para timestamps en zona horaria correcta
+- decimal_to_float(value) - Para convertir Decimal a float en responses JSON
+
+PAGINACIÓN SAAI OFICIAL:
+- extract_pagination_params(event) - Extrae limit y next_token
+- create_next_token(last_evaluated_key) - Crea token para siguiente página
+
+GENERACIÓN DE CÓDIGOS:
+- generar_codigo_notificacion(tenant_id) - Para notificaciones
+- generar_codigo_producto(tenant_id) - Para productos  
+- generar_codigo_venta(tenant_id) - Para ventas
+- generar_codigo_gasto(tenant_id) - Para gastos
+- increment_counter(table, tenant_id, counter_name) - Para contadores manuales
+
+VALIDACIONES:
+- validar_formato_codigo_tienda(codigo) - Valida formato T###
+- es_fecha_valida(fecha_str) - Valida fechas ISO
+
+═══════════════════════════════════════════════════════════════════════════════
+CAMBIOS RECIENTES (31 DIC 2025)
+═══════════════════════════════════════════════════════════════════════════════
+
+CORRECCIONES REALIZADAS:
+------------------------
+1. ✅ AGREGADA decimal_to_float() en dynamodb_utils.py
+   - Convierte Decimal de DynamoDB a float para JSON
+   - Resuelve ImportError en módulos ventas y gastos
+   - Ubicación: línea 399 de dynamodb_utils.py
+
+2. ✅ CORREGIDA log_request() en response_utils.py
+   - Parámetro context ahora es OPCIONAL
+   - Compatible con log_request(event) y log_request(event, context)
+   - No requiere cambios en Lambdas existentes
+
+3. ✅ LIMPIADO __init__.py
+   - Eliminados 8 imports fantasma de pagination_utils
+   - Solo exporta funciones reales: extract_pagination_params, create_next_token, decode_next_token
+   - Agregado decimal_to_float a exports
+
+IMPACTO EN LAMBDAS:
+-------------------
+- ✅ Todos los Lambdas existentes funcionan sin cambios
+- ✅ decimal_to_float ahora disponible donde se esperaba
+- ✅ log_request compatible con ambas firmas
+- ✅ Paginación SAAI 1.6 completamente funcional
+
+═══════════════════════════════════════════════════════════════════════════════
+DISCREPANCIAS ENCONTRADAS (RESUELTAS)
+═══════════════════════════════════════════════════════════════════════════════
+
+ESTADO ACTUAL:
+--------------
+Todas las discrepancias han sido RESUELTAS.
+
+ANTES (PROBLEMAS):
+- ❌ decimal_to_float NO existía (causaba ImportError)
+- ❌ log_request requería context obligatorio (causaba TypeError)
+- ❌ __init__.py importaba 8 funciones fantasma
+
+AHORA (CORREGIDO):
+- ✅ decimal_to_float existe y funciona correctamente
+- ✅ log_request acepta context opcional
+- ✅ __init__.py solo importa funciones reales
+- ✅ Paginación SAAI oficial 100% operativa
+
+FUNCIONES REALES DE PAGINACIÓN:
+- extract_pagination_params() (en lugar de extraer_parametros_paginacion)
+- create_next_token() y decode_next_token() para manejo de tokens
+- success_response() para respuestas (en lugar de crear_respuesta_paginada)
+
+═══════════════════════════════════════════════════════════════════════════════
+PATRÓN DE USO TÍPICO PARA ENDPOINTS
+═══════════════════════════════════════════════════════════════════════════════
+
+Para un endpoint típico de listado con paginación:
+
+```python
+from utils import (
+    success_response, error_response, log_request,
+    extract_tenant_from_jwt_claims, query_by_tenant,
+    extract_pagination_params, create_next_token
+)
+
+def handler(event, context):
+    try:
+        log_request(event, context)
+        
+        # Extraer tenant del JWT
+        tenant_id = extract_tenant_from_jwt_claims(event)
+        if not tenant_id:
+            return error_response("Token inválido", 401)
+        
+        # Parámetros de paginación
+        pagination = extract_pagination_params(event)
+        
+        # Consultar datos (filtra INACTIVOS automáticamente)
+        result = query_by_tenant(
+            table_name=TABLE_NAME,
+            tenant_id=tenant_id,
+            limit=pagination['limit'],
+            last_evaluated_key=pagination['exclusive_start_key']
+        )
+        
+        # Preparar respuesta
+        response_data = {"items": result['items']}
+        
+        # Agregar next_token si hay más páginas
+        if result.get('last_evaluated_key'):
+            next_token = create_next_token(result['last_evaluated_key'])
+            if next_token:
+                response_data["next_token"] = next_token
+        
+        return success_response(data=response_data)
+        
+    except Exception as e:
+        return error_response("Error interno del servidor", 500)
+```
+
+═══════════════════════════════════════════════════════════════════════════════
+FIN DEL RESUMEN
+═══════════════════════════════════════════════════════════════════════════════

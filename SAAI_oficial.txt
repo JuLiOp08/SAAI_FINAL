@@ -120,7 +120,7 @@ Response:
   "data": {
     "token": "jwt_token",
     "user": {
-      "codigo_usuario": "U0001",
+      "codigo_usuario": "T002U001",
       "nombre": "Empleado Caja",
       "role": "worker",
       "codigo_tienda": "T002"
@@ -388,7 +388,7 @@ Response:
 
 ------------------------------------
 
-Lambda: BuscarVenta
+Lambda:
 Método: POST
 Path: /ventas/buscar
 
@@ -410,16 +410,7 @@ Request:
   }
 }
 
-EJEMPLO 3 – Buscar por nombre de cliente (parcial):
-Request:
-{
-  "body": {
-    "criterio": "cliente",
-    "valor": "Juan"
-  }
-}
-
-EJEMPLO 4 – Buscar por método de pago:
+EJEMPLO 3 – Buscar por método de pago:
 Request:
 {
   "body": {
@@ -463,14 +454,13 @@ Response:
   "success": true,
   "data": [
     {
-      "codigo_venta": "V001",
-      "cliente": "Juan Pérez",
+      "codigo_venta": "T002V001",
       "total": 148.09,
       "fecha": "2025-11-08",
       "metodo_pago": "efectivo",
       "items": [
         {
-          "codigo_producto": "P001",
+          "codigo_producto": "T002P001",
           "nombre_producto": "Producto 1",
           "cantidad": 2,
           "precio_unitario": 50.0,
@@ -500,7 +490,7 @@ Response:
   "data": {
     "notificaciones": [
       {
-        "codigo_notificacion": "N001",
+        "codigo_notificacion": "T002N001",
         "tipo": "bajoStock",
         "titulo": "Stock bajo",
         "mensaje": "Coca Cola tiene solo 3 unidades",
@@ -763,7 +753,7 @@ Response:
   "data": {
     "token": "jwt_token",
     "user": {
-      "codigo_usuario": "A001",
+      "codigo_usuario": "T002A001",
       "nombre": "Administrador",
       "role": "admin",
       "codigo_tienda": "T002"
@@ -795,7 +785,7 @@ Response:
   "success": true,
   "message": "Usuario creado",
   "data": {
-    "codigo_usuario": "U002"
+    "codigo_usuario": "T002U002"
   }
 }
 
@@ -816,13 +806,13 @@ Response:
   "data": {
     "usuarios": [
       {
-        "codigo_usuario": "U002",
+        "codigo_usuario": "T002U002",
         "nombre": "Juan Perez",
         "email": "juan@tienda.com",
         "role": "worker"
       }
-    ]
-  "next_token": "..."
+    ],
+    "next_token": "..."
   }
 }
 
@@ -852,7 +842,7 @@ EJEMPLO 3 – Buscar por código de usuario:
 Request:
 {
   "body": {
-    "query": "U002"
+    "query": "T002U002"
   }
 }
 
@@ -870,7 +860,7 @@ Response:
   "data": {
     "usuarios": [
       {
-        "codigo_usuario": "U002",
+        "codigo_usuario": "T002U002",
         "nombre": "Juan Perez",
         "email": "juan@tienda.com",
         "role": "worker"
@@ -898,7 +888,7 @@ Response:
   "success": true,
   "message": "Usuario actualizado",
   "data": {
-    "codigo_usuario": "U002"
+    "codigo_usuario": "T002U002"
   }
 }
 
@@ -920,7 +910,7 @@ Response:
   "success": true,
   "message": "Usuario eliminado",
   "data": {
-    "codigo_usuario": "U002"
+    "codigo_usuario": "T002U002"
   }
 }
 
@@ -947,7 +937,7 @@ Response:
   "success": true,
   "message": "Gasto registrado",
   "data": {
-    "codigo_gasto": "G001"
+    "codigo_gasto": "T002G001"
   }
 }
 
@@ -968,7 +958,7 @@ Response:
   "data": {
     "gastos": [
       {
-        "codigo_gasto": "G001",
+        "codigo_gasto": "T002G001",
         "descripcion": "Pago proveedor",
         "monto": 150.0,
         "fecha": "2025-11-08"
@@ -1006,7 +996,7 @@ Request:
 {
   "body": {
     "criterio": "codigo_gasto",
-    "valor": "G001"
+    "valor": "T002G001"
   }
 }
 
@@ -1045,7 +1035,7 @@ Response:
   "success": true,
   "data": [
     {
-      "codigo_gasto": "G001",
+      "codigo_gasto": "T002G001",
       "descripcion": "Pago proveedor",
       "monto": 150.0,
       "categoria": "proveedores",
@@ -1073,7 +1063,7 @@ Response:
   "success": true,
   "message": "Gasto actualizado",
   "data": {
-    "codigo_gasto": "G001"
+    "codigo_gasto": "T002G001"
   }
 }
 
@@ -1095,7 +1085,7 @@ Response:
   "success": true,
   "message": "Gasto eliminado",
   "data": {
-    "codigo_gasto": "G001"
+    "codigo_gasto": "T002G001"
   }
 }
 
@@ -2171,7 +2161,7 @@ Propósito:
 •	Usuarios por tienda (admin y trabajadores).
 Key:
 •	tenant_id = codigo_tienda
-•	entity_id = codigo_usuario (ej. U002)
+•	entity_id = codigo_usuario (ej. T002U002)
 data (contiene):
 •	codigo_usuario, nombre, email, role (admin/worker)
 •	password_hash (o equivalente)
@@ -2207,7 +2197,7 @@ Propósito:
 •	Gastos registrados por la tienda.
 Key:
 •	tenant_id = codigo_tienda
-•	entity_id = codigo_gasto (ej. G001)
+•	entity_id = codigo_gasto (ej. T002G001)
 data (contiene):
 •	codigo_gasto, descripcion, monto, categoria, fecha
 •	codigo_usuario (quien registró, desde JWT)
@@ -2218,7 +2208,7 @@ Propósito:
 •	Notificaciones persistidas que ve el admin/worker en el frontend.
 Key:
 •	tenant_id = codigo_tienda
-•	entity_id = codigo_notificacion (ej. N001)
+•	entity_id = codigo_notificacion (ej. T002N001)
 data (contiene):
 •	codigo_notificacion, tipo, titulo, mensaje, origen
 •	severidad (INFO/CRITICAL)
@@ -2298,7 +2288,7 @@ data (contiene):
 •	ttl  
 {
   "connection_id": "...",
-  "codigo_usuario": "U001",
+  "codigo_usuario": "T002U001",
   "role": "admin",
   "pantalla": "ventas|notificaciones|analitica",
   "connected_at": "...",

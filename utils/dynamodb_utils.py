@@ -395,3 +395,36 @@ def batch_write_items(table_name, items):
     except Exception as e:
         logger.error(f"Error inesperado en batch write: {e}")
         return False
+
+def decimal_to_float(value):
+    """
+    Convierte valores Decimal de DynamoDB a float para JSON serialization
+    Necesario porque DynamoDB retorna números como Decimal, pero JSON no los soporta
+    
+    Args:
+        value: Valor a convertir (puede ser Decimal, int, float, None)
+        
+    Returns:
+        float: Valor convertido o 0.0 si es None
+    """
+    from decimal import Decimal
+    
+    if value is None:
+        return 0.0
+    
+    if isinstance(value, Decimal):
+        return float(value)
+    
+    if isinstance(value, (int, float)):
+        return float(value)
+    
+    # Si es string, intentar convertir
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            logger.warning(f"No se pudo convertir '{value}' a float, retornando 0.0")
+            return 0.0
+    
+    logger.warning(f"Tipo no soportado para decimal_to_float: {type(value)}, retornando 0.0")
+    return 0.0

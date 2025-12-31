@@ -26,7 +26,7 @@ def handler(event, context):
     Request:
     {
         "body": {
-            "items": [
+            "productos": [
                 {
                     "codigo_producto": "P001",
                     "cantidad": 2
@@ -43,10 +43,8 @@ def handler(event, context):
     {
         "success": true,
         "data": {
-            "subtotal": 125.50,
-            "igv": 22.59,
-            "total": 148.09,
-            "items": [
+            "total": 125.50,
+            "productos": [
                 {
                     "codigo_producto": "P001",
                     "nombre_producto": "Producto 1",
@@ -78,15 +76,15 @@ def handler(event, context):
         if not body:
             return validation_error_response("Request body requerido")
         
-        items = body.get('items')
-        if not items or not isinstance(items, list) or len(items) == 0:
-            return validation_error_response("Items es obligatorio y debe ser una lista no vacía")
+        productos = body.get('productos')
+        if not productos or not isinstance(productos, list) or len(productos) == 0:
+            return validation_error_response("Productos es obligatorio y debe ser una lista no vacía")
         
-        # Validar items y calcular totales
+        # Validar productos y calcular totales
         total_subtotal = Decimal('0.00')
-        items_calculados = []
+        productos_calculados = []
         
-        for item in items:
+        for item in productos:
             codigo_producto = item.get('codigo_producto')
             cantidad = item.get('cantidad')
             
@@ -101,19 +99,19 @@ def handler(event, context):
                 return validation_error_response("La cantidad debe ser un número entero válido")
             
             # Obtener producto para verificar existencia y precio
-            producto = get_item_standard(PRODUCTOS_TABLE, tenant_id, codigo_producto)
-            if not producto or producto.get('estado') != 'ACTIVO':
+            producto_data = get_item_standard(PRODUCTOS_TABLE, tenant_id, codigo_producto)
+            if not producto_data or producto_data.get('estado') != 'ACTIVO':
                 return error_response(f"Producto {codigo_producto} no encontrado o inactivo", 404)
             
             # Verificar stock disponible
-            stock_actual = int(producto.get('stock', 0))
+            stock_actual = int(producto_data.get('stock', 0))
             if stock_actual < cantidad:
                 return error_response(
                     f"Stock insuficiente para producto {codigo_producto}. Disponible: {stock_actual}, Solicitado: {cantidad}",
                     400
                 )
             
-            precio_unitario = producto.get('precio', Decimal('0.00'))
+            precio_unitario = producto_data.get('precio', Decimal('0.00'))
             if isinstance(precio_unitario, (int, float)):
                 precio_unitario = Decimal(str(precio_unitario))
             
@@ -121,31 +119,27 @@ def handler(event, context):
             subtotal_item = precio_unitario * Decimal(str(cantidad))
             total_subtotal += subtotal_item
             
-            # Agregar item calculado
-            item_calculado = {
+            # Agregar producto calculado
+            producto_calculado = {
                 'codigo_producto': codigo_producto,
-                'nombre_producto': producto.get('nombre'),
+                'nombre_producto': producto_data.get('nombre'),
                 'precio_unitario': decimal_to_float(precio_unitario),
                 'cantidad': cantidad,
                 'subtotal_item': decimal_to_float(subtotal_item)
             }
             
-            items_calculados.append(item_calculado)
+            productos_calculados.append(producto_calculado)
         
-        # Calcular IGV (18% en Perú)
-        igv_rate = Decimal('0.18')
-        igv = total_subtotal * igv_rate
-        total = total_subtotal + igv
+        # Calcular total (sin IGV según documentación oficial SAAI)
+        total = total_subtotal
         
-        # Preparar response
+        # Preparar response según documentación oficial SAAI
         calculation_data = {
-            'subtotal': decimal_to_float(total_subtotal),
-            'igv': decimal_to_float(igv),
             'total': decimal_to_float(total),
-            'items': items_calculados
+            'productos': productos_calculados
         }
         
-        logger.info(f"Calculado monto de venta para {len(items)} items en tienda {tenant_id}. Total: {decimal_to_float(total)}")
+        logger.info(f"Calculado monto de venta para {len(productos)} productos en tienda {tenant_id}. Total: {decimal_to_float(total)}")
         
         return success_response(data=calculation_data)
         

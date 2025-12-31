@@ -61,7 +61,8 @@ from .dynamodb_utils import (
     query_by_tenant_with_filter,
     increment_counter,
     batch_write_items,
-    get_table
+    get_table,
+    decimal_to_float
 )
 
 from .code_generator import (
@@ -95,14 +96,9 @@ from .jwt_utils import (
 )
 
 from .pagination_utils import (
-    extraer_parametros_paginacion,
-    crear_respuesta_paginada,
-    crear_cursor_paginacion,
-    decodificar_cursor_paginacion,
-    calcular_offset_y_pagina,
-    validar_parametros_busqueda,
-    crear_filtros_dynamodb_desde_busqueda,
-    ordenar_items_en_memoria
+    extract_pagination_params,
+    create_next_token,
+    decode_next_token
 )
 
 # Versión del módulo

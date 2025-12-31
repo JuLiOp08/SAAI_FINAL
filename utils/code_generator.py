@@ -162,7 +162,7 @@ def generar_codigo_reporte(codigo_tienda, tipo_reporte):
 
 def generar_codigo_notificacion(codigo_tienda):
     """
-    Genera un código único para notificación en formato {codigo_tienda}N{timestamp}
+    Genera un código único para notificación en formato {codigo_tienda}N###
     
     Args:
         codigo_tienda (str): Código de la tienda
@@ -170,8 +170,19 @@ def generar_codigo_notificacion(codigo_tienda):
     Returns:
         str: Código de notificación generado
     """
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    return f"{codigo_tienda}N{timestamp}"
+    try:
+        # Usar contador incremental para consistencia con el patrón del proyecto
+        contador = increment_counter('SAAI_Counters', codigo_tienda, 'NOTIFICACIONES')
+        if contador:
+            return f"{codigo_tienda}N{contador:03d}"
+        else:
+            # Fallback a timestamp si no hay contador disponible
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            return f"{codigo_tienda}N{timestamp}"
+    except Exception:
+        # Fallback a timestamp en caso de error
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        return f"{codigo_tienda}N{timestamp}"
 
 def generar_codigo_analitica(codigo_tienda):
     """
