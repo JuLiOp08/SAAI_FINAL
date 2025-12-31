@@ -6,6 +6,7 @@ from utils import (
     error_response,
     validation_error_response,
     parse_request_body,
+    get_path_parameter,
     log_request,
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
@@ -46,8 +47,13 @@ def handler(event, context):
     try:
         log_request(event)
         
+        # Validar que el usuario sea SAAI
+        user_info = extract_user_from_jwt_claims(event)
+        if not user_info or user_info.get('rol') != 'SAAI':
+            return error_response("Solo usuarios SAAI pueden actualizar tiendas", 403)
+        
         # Obtener código de tienda del path
-        codigo_tienda = event.get('pathParameters', {}).get('codigo_tienda')
+        codigo_tienda = get_path_parameter(event, 'codigo_tienda')
         if not codigo_tienda:
             return validation_error_response("Código de tienda requerido en el path")
         
@@ -57,11 +63,9 @@ def handler(event, context):
             return validation_error_response("Request body requerido")
         
         # Verificar que la tienda existe
-        item = get_item_standard(TIENDAS_TABLE, "SAAI", codigo_tienda)
-        if not item:
+        tienda_data = get_item_standard(TIENDAS_TABLE, "SAAI", codigo_tienda)
+        if not tienda_data:
             return error_response("Tienda no encontrada", 404)
-        
-        tienda_data = item['data']
         
         # Actualizar campos permitidos
         fecha_actual = obtener_fecha_hora_peru()
@@ -73,6 +77,12 @@ def handler(event, context):
             estado = str(body['estado']).strip().upper()
             if estado not in ['ACTIVA', 'SUSPENDIDA', 'ELIMINADA']:
                 return validation_error_response("Estado debe ser ACTIVA, SUSPENDIDA o ELIMINADA")
+            
+            # Agregar metadatos según el estado
+            if estado == 'ELIMINADA' and tienda_data.get('estado') != 'ELIMINADA':
+                tienda_data['fecha_baja'] = fecha_actual
+                tienda_data['motivo_baja'] = body.get('motivo', 'Eliminada por administrador SAAI')
+            
             tienda_data['estado'] = estado
         
         if 'email_tienda' in body:

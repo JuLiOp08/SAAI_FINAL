@@ -11,22 +11,19 @@ from utils import (
     success_response,
     error_response,
     log_request,
-    get_lima_datetime,
-    get_tenant_id_from_jwt,
-    get_codigo_usuario_from_jwt,
-    generate_codigo
+    obtener_fecha_hora_peru,
+    extract_tenant_from_jwt_claims,
+    extract_user_from_jwt_claims,
+    put_item_standard,
+    query_by_tenant,
+    increment_counter
 )
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # DynamoDB y S3
-dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')
-
-ventas_table = dynamodb.Table(os.environ['VENTAS_TABLE'])
-reportes_table = dynamodb.Table(os.environ['REPORTES_TABLE'])
-counters_table = dynamodb.Table(os.environ['COUNTERS_TABLE'])
 
 S3_BUCKET = os.environ.get('S3_BUCKET')
 
@@ -50,13 +47,14 @@ def handler(event, context):
         log_request(event)
         
         # JWT validation + tenant
-        tenant_id = get_tenant_id_from_jwt(event)
-        codigo_usuario = get_codigo_usuario_from_jwt(event)
+        tenant_id = extract_tenant_from_jwt_claims(event)
+        user_info = extract_user_from_jwt_claims(event)
+        codigo_usuario = user_info.get('codigo_usuario') if user_info else None
         
         # Parse body para fechas
         body = json.loads(event.get('body', '{}'))
         
-        lima_now = get_lima_datetime()
+        fecha_actual = obtener_fecha_hora_peru()
         
         # Fechas del reporte (default: últimos 7 días)
         if 'fecha_inicio' in body and 'fecha_fin' in body:
@@ -66,8 +64,8 @@ def handler(event, context):
             except ValueError:
                 return error_response("Formato de fecha inválido. Use YYYY-MM-DD", 400)
         else:
-            fecha_fin = lima_now
-            fecha_inicio = lima_now - timedelta(days=6)
+            fecha_fin = datetime.fromisoformat(fecha_actual[:10])  # Solo fecha
+            fecha_inicio = fecha_fin - timedelta(days=6)
         
         if fecha_inicio > fecha_fin:
             return error_response("Fecha inicio no puede ser mayor a fecha fin", 400)
@@ -78,31 +76,26 @@ def handler(event, context):
         # OBTENER DATOS DE VENTAS
         # =================================================================
         
-        response = ventas_table.query(
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#fecha BETWEEN :inicio AND :fin AND #data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#fecha': 'fecha',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':inicio': fecha_inicio.strftime('%Y-%m-%d'),
-                ':fin': fecha_fin.strftime('%Y-%m-%d'),
-                ':estado': 'ACTIVO'
-            }
-        )
+        result = query_by_tenant('SAAI_Ventas', tenant_id)
+        todas_ventas = result.get('items', [])
         
-        ventas = response.get('Items', [])
+        # Filtrar por fechas y estado
+        ventas = []
+        for venta in todas_ventas:
+            fecha_venta = venta.get('fecha', '')[:10]  # YYYY-MM-DD
+            if (fecha_inicio.strftime('%Y-%m-%d') <= fecha_venta <= fecha_fin.strftime('%Y-%m-%d') and 
+                venta.get('estado') == 'COMPLETADA'):
+                ventas.append(venta)
         
         if not ventas:
             return error_response("No hay ventas en el período seleccionado", 400)
         
         # =================================================================
-        # GENERAR CÓDIGO DE REPORTE
+        # GENERAR CÓDIGO DE REPORTE CON TIENDA
         # =================================================================
         
-        codigo_reporte = generate_codigo(counters_table, tenant_id, "REPORTES", "R")
+        contador = increment_counter('SAAI_Counters', tenant_id, 'REPORTES')
+        codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
         # CONSTRUIR DATOS EXCEL
@@ -122,22 +115,23 @@ def handler(event, context):
             # Datos de venta individual
             datos_ventas.append({
                 'Código Venta': data.get('codigo_venta', ''),
-                'Fecha': data.get('fecha', '')[:10],  # Solo fecha
-                'Hora': data.get('fecha', '')[11:19] if len(data.get('fecha', '')) > 10 else '',  # Solo hora
+                'Fecha': data.get('fecha', ''),  # Ya es solo fecha YYYY-MM-DD
+                'Cliente': data.get('cliente', ''),
                 'Total': total_venta,
                 'Método Pago': data.get('metodo_pago', ''),
                 'Cantidad Items': len(data.get('productos', [])),
                 'Vendedor': data.get('codigo_usuario', ''),
-                'Estado': data.get('estado', 'ACTIVO')
+                'Estado': data.get('estado', 'COMPLETADA'),
+                'Fecha Registro': data.get('created_at', '')[:10] if data.get('created_at') else ''
             })
             
             # Acumular productos vendidos
-            for producto in data.get('productos', []):
+            for producto in data.get('productos', []):  # Cambiar de 'items' a 'productos'
                 codigo = producto.get('codigo_producto', '')
-                nombre = producto.get('nombre', codigo)
+                nombre = producto.get('nombre_producto', codigo)  # Cambiar de 'nombre' a 'nombre_producto'
                 cantidad = int(producto.get('cantidad', 0))
                 precio = float(producto.get('precio_unitario', 0))
-                subtotal = cantidad * precio
+                subtotal = float(producto.get('subtotal_item', 0))  # Usar subtotal_item calculado
                 
                 if codigo not in datos_productos_vendidos:
                     datos_productos_vendidos[codigo] = {
@@ -152,7 +146,7 @@ def handler(event, context):
                 datos_productos_vendidos[codigo]['Ingresos Total'] += subtotal
             
             # Acumular métodos de pago
-            metodo = data.get('metodo_pago', 'No especificado')
+            metodo = venta.get('metodo_pago', 'No especificado')
             if metodo not in datos_metodos_pago:
                 datos_metodos_pago[metodo] = {'Cantidad': 0, 'Total': 0}
             
@@ -181,7 +175,7 @@ def handler(event, context):
             {'Métrica': 'Total Ingresos', 'Valor': f"S/ {total_ingresos:.2f}"},
             {'Métrica': 'Promedio por Venta', 'Valor': f"S/ {total_ingresos/total_ventas:.2f}" if total_ventas > 0 else 'S/ 0.00'},
             {'Métrica': 'Productos Únicos', 'Valor': len(datos_productos_vendidos)},
-            {'Métrica': 'Fecha Generación', 'Valor': lima_now.strftime('%Y-%m-%d %H:%M:%S')}
+            {'Métrica': 'Fecha Generación', 'Valor': fecha_actual[:19]}  # YYYY-MM-DDTHH:mm:ss
         ])
         
         # =================================================================
@@ -244,7 +238,7 @@ def handler(event, context):
         reporte_data = {
             "codigo_reporte": codigo_reporte,
             "tipo": "ventas",
-            "fecha_generacion": lima_now.isoformat(),
+            "fecha_generacion": fecha_actual,
             "parametros": {
                 "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
                 "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
@@ -256,14 +250,15 @@ def handler(event, context):
             "tamaño_bytes": len(excel_buffer.getvalue()),
             "generado_por": codigo_usuario,
             "estado": "COMPLETADO",
-            "created_at": lima_now.isoformat()
+            "created_at": fecha_actual
         }
         
-        reportes_table.put_item(Item={
-            'tenant_id': tenant_id,
-            'entity_id': codigo_reporte,
-            'data': reporte_data
-        })
+        put_item_standard(
+            'SAAI_Reportes',
+            tenant_id=tenant_id,
+            entity_id=codigo_reporte,
+            data=reporte_data
+        )
         
         logger.info(f"✅ Reporte ventas generado: {codigo_reporte}")
         

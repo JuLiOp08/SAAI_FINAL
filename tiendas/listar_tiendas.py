@@ -6,7 +6,10 @@ from utils import (
     error_response,
     log_request,
     extract_tenant_from_jwt_claims,
-    query_by_tenant
+    extract_user_from_jwt_claims,
+    query_by_tenant,
+    extract_pagination_params,
+    create_next_token
 )
 
 logger = logging.getLogger()
@@ -44,17 +47,33 @@ def handler(event, context):
     try:
         log_request(event)
         
-        # Para SAAI, listar todas las tiendas (tenant_id = "SAAI")
-        items = query_by_tenant(TIENDAS_TABLE, "SAAI")
+        # Validar que el usuario sea SAAI
+        user_info = extract_user_from_jwt_claims(event)
+        if not user_info or user_info.get('rol') != 'SAAI':
+            return error_response("Solo usuarios SAAI pueden listar tiendas", 403)
+        
+        # Extraer parámetros de paginación
+        pagination = extract_pagination_params(event)
+        
+        # Para SAAI, listar todas las tiendas (tenant_id = "SAAI") con paginación
+        result = query_by_tenant(
+            TIENDAS_TABLE, 
+            "SAAI",
+            limit=pagination['limit'],
+            last_evaluated_key=pagination['exclusive_start_key'],
+            include_inactive=True  # Incluir todas las tiendas (ACTIVA, SUSPENDIDA, ELIMINADA)
+        )
         
         # Formatear respuesta
         tiendas = []
-        for item in items:
+        for item in result['items']:
             data = item.get('data', {})
             # Incluir todas las tiendas (ACTIVA, SUSPENDIDA, ELIMINADA)
             tienda = {
                 'codigo_tienda': data.get('codigo_tienda'),
                 'nombre_tienda': data.get('nombre_tienda'),
+                'email_tienda': data.get('email_tienda'),
+                'telefono': data.get('telefono'),
                 'estado': data.get('estado'),
                 'created_at': data.get('created_at', '').split('T')[0] if data.get('created_at') else None
             }
@@ -63,11 +82,18 @@ def handler(event, context):
         # Ordenar por fecha de creación descendente
         tiendas.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         
+        # Preparar respuesta
+        response_data = {"tiendas": tiendas}
+        
+        # Agregar next_token si hay más páginas
+        if result.get('last_evaluated_key'):
+            next_token = create_next_token(result['last_evaluated_key'])
+            if next_token:
+                response_data["next_token"] = next_token
+        
         logger.info(f"Tiendas listadas: {len(tiendas)}")
         
-        return success_response(
-            data={"tiendas": tiendas}
-        )
+        return success_response(data=response_data)
         
     except Exception as e:
         logger.error(f"Error listando tiendas: {str(e)}")

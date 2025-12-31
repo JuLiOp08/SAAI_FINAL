@@ -13,7 +13,8 @@ from utils import (
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
     put_item_standard,
-    increment_counter,
+    generar_codigo_tienda,
+    generar_codigo_usuario,
     obtener_fecha_hora_peru
 )
 
@@ -29,7 +30,7 @@ USUARIOS_TABLE = os.environ.get('USUARIOS_TABLE')
 COUNTERS_TABLE = os.environ.get('COUNTERS_TABLE')
 
 # Topics SNS
-BIENVENIDA_TOPIC = os.environ.get('BIENVENIDA_SAAI_TOPIC_ARN')
+BIENVENIDA_SAAI_TOPIC = os.environ.get('BIENVENIDA_SNS_TOPIC_ARN')
 
 def handler(event, context):
     """
@@ -64,6 +65,11 @@ def handler(event, context):
     try:
         log_request(event)
         
+        # Validar que el usuario sea SAAI
+        user_info = extract_user_from_jwt_claims(event)
+        if not user_info or user_info.get('rol') != 'SAAI':
+            return error_response("Solo usuarios SAAI pueden registrar tiendas", 403)
+        
         # Parse request body
         body = parse_request_body(event)
         if not body:
@@ -84,9 +90,8 @@ def handler(event, context):
             if not admin_data.get(field):
                 return validation_error_response(f"Campo admin.{field} es obligatorio")
         
-        # Generar código de tienda usando contador global SAAI
-        contador_tienda = increment_counter(COUNTERS_TABLE, "SAAI", "TIENDAS")
-        codigo_tienda = f"T{contador_tienda:03d}"
+        # Generar código de tienda usando utils
+        codigo_tienda = generar_codigo_tienda()
         
         # Crear tienda
         fecha_actual = obtener_fecha_hora_peru()
@@ -110,8 +115,7 @@ def handler(event, context):
         )
         
         # Crear usuario admin de la tienda
-        contador_admin = increment_counter(COUNTERS_TABLE, codigo_tienda, "USUARIOS")
-        codigo_usuario_admin = f"{codigo_tienda}U{contador_admin:03d}"
+        codigo_usuario_admin = generar_codigo_usuario(codigo_tienda)
         
         # Hash de la password con salt
         salt = os.urandom(32)
@@ -137,7 +141,7 @@ def handler(event, context):
             data=admin_usuario_data
         )
         
-        # Publicar evento de bienvenida en SNS
+        # Publicar evento de bienvenida en SNS BienvenidaSAAI
         try:
             mensaje_bienvenida = {
                 'tenant_id': codigo_tienda,
@@ -147,7 +151,7 @@ def handler(event, context):
             }
             
             sns_client.publish(
-                TopicArn=BIENVENIDA_TOPIC,
+                TopicArn=BIENVENIDA_SAAI_TOPIC,
                 Message=json.dumps(mensaje_bienvenida),
                 MessageAttributes={
                     'tenant_id': {'DataType': 'String', 'StringValue': codigo_tienda},

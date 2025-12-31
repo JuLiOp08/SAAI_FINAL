@@ -6,6 +6,7 @@ from utils import (
     error_response,
     validation_error_response,
     parse_request_body,
+    get_path_parameter,
     log_request,
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
@@ -44,8 +45,13 @@ def handler(event, context):
     try:
         log_request(event)
         
+        # Validar que el usuario sea SAAI
+        user_info = extract_user_from_jwt_claims(event)
+        if not user_info or user_info.get('rol') != 'SAAI':
+            return error_response("Solo usuarios SAAI pueden eliminar tiendas", 403)
+        
         # Obtener código de tienda del path
-        codigo_tienda = event.get('pathParameters', {}).get('codigo_tienda')
+        codigo_tienda = get_path_parameter(event, 'codigo_tienda')
         if not codigo_tienda:
             return validation_error_response("Código de tienda requerido en el path")
         
@@ -54,11 +60,9 @@ def handler(event, context):
         motivo = body.get('motivo', 'Eliminada por administrador SAAI') if body else 'Eliminada por administrador SAAI'
         
         # Verificar que la tienda existe
-        item = get_item_standard(TIENDAS_TABLE, "SAAI", codigo_tienda)
-        if not item:
+        tienda_data = get_item_standard(TIENDAS_TABLE, "SAAI", codigo_tienda)
+        if not tienda_data:
             return error_response("Tienda no encontrada", 404)
-        
-        tienda_data = item['data']
         
         # Verificar que la tienda no esté ya eliminada
         if tienda_data.get('estado') == 'ELIMINADA':
@@ -66,10 +70,12 @@ def handler(event, context):
         
         # Realizar eliminación lógica (soft delete)
         fecha_actual = obtener_fecha_hora_peru()
+        user_info = extract_user_from_jwt_claims(event)
         
         tienda_data['estado'] = 'ELIMINADA'
         tienda_data['motivo_baja'] = str(motivo).strip()
         tienda_data['fecha_baja'] = fecha_actual
+        tienda_data['baja_por'] = user_info.get('codigo_usuario', 'SAAI_UNKNOWN')
         tienda_data['updated_at'] = fecha_actual
         
         # Guardar en DynamoDB

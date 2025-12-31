@@ -8,18 +8,18 @@ from utils import (
     success_response,
     error_response,
     log_request,
-    get_tenant_id_from_jwt,
-    paginate_response
+    extract_tenant_from_jwt_claims,
+    query_by_tenant,
+    extract_pagination_params,
+    create_next_token
 )
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # DynamoDB y S3
-dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')
 
-reportes_table = dynamodb.Table(os.environ['REPORTES_TABLE'])
 S3_BUCKET = os.environ.get('S3_BUCKET')
 
 def handler(event, context):
@@ -49,49 +49,33 @@ def handler(event, context):
         log_request(event)
         
         # JWT validation + tenant
-        tenant_id = get_tenant_id_from_jwt(event)
+        tenant_id = extract_tenant_from_jwt_claims(event)
         
-        # Query params
+        # Extraer parámetros de paginación según SAAI 1.6
+        pagination = extract_pagination_params(event, default_limit=20, max_limit=100)
+        
+        # Query params adicionales
         query_params = event.get('queryStringParameters') or {}
-        limit = int(query_params.get('limit', 20))
-        next_token = query_params.get('next_token')
         tipo_filtro = query_params.get('tipo')  # inventario, ventas, gastos, general
         
         logger.info(f"📋 Listando historial reportes: {tenant_id} (tipo={tipo_filtro})")
         
         # =================================================================
-        # QUERY DYNAMODB
+        # OBTENER REPORTES CON PAGINACIÓN
         # =================================================================
         
-        query_kwargs = {
-            'KeyConditionExpression': Key('tenant_id').eq(tenant_id),
-            'ScanIndexForward': False,  # Orden descendente (más recientes primero)
-            'Limit': limit
-        }
+        result = query_by_tenant(
+            'SAAI_Reportes',
+            tenant_id,
+            limit=pagination['limit'],
+            last_evaluated_key=pagination['exclusive_start_key']
+        )
         
-        # Aplicar filtro por tipo si se especifica
+        reportes_items = result.get('items', [])
+        
+        # Filtrar por tipo si se especifica
         if tipo_filtro:
-            query_kwargs['FilterExpression'] = '#data.#tipo = :tipo'
-            query_kwargs['ExpressionAttributeNames'] = {
-                '#data': 'data',
-                '#tipo': 'tipo'
-            }
-            query_kwargs['ExpressionAttributeValues'] = {
-                ':tipo': tipo_filtro
-            }
-        
-        # Paginación
-        if next_token:
-            try:
-                start_key = json.loads(next_token)
-                query_kwargs['ExclusiveStartKey'] = start_key
-            except (json.JSONDecodeError, ValueError):
-                logger.warning(f"Token de paginación inválido: {next_token}")
-                # Continuar sin token
-        
-        response = reportes_table.query(**query_kwargs)
-        
-        reportes_items = response.get('Items', [])
+            reportes_items = [r for r in reportes_items if r.get('tipo') == tipo_filtro]
         
         # =================================================================
         # CONSTRUIR RESPUESTA CON PRESIGNED URLS
@@ -147,19 +131,18 @@ def handler(event, context):
             reportes_response.append(reporte_info)
         
         # =================================================================
-        # PAGINACIÓN
+        # PAGINACIÓN SAAI 1.6
         # =================================================================
         
         response_data = {
             'reportes': reportes_response
         }
         
-        # Si hay más resultados, incluir next_token
-        if 'LastEvaluatedKey' in response:
-            try:
-                response_data['next_token'] = json.dumps(response['LastEvaluatedKey'])
-            except Exception as e:
-                logger.error(f"Error serializando LastEvaluatedKey: {str(e)}")
+        # Agregar next_token si hay más páginas
+        if result.get('last_evaluated_key'):
+            next_token = create_next_token(result['last_evaluated_key'])
+            if next_token:
+                response_data['next_token'] = next_token
         
         logger.info(f"✅ Historial reportes listado: {len(reportes_response)} reportes")
         

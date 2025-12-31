@@ -11,24 +11,19 @@ from utils import (
     success_response,
     error_response,
     log_request,
-    get_lima_datetime,
-    get_tenant_id_from_jwt,
-    get_codigo_usuario_from_jwt,
-    generate_codigo
+    obtener_fecha_hora_peru,
+    extract_tenant_from_jwt_claims,
+    extract_user_from_jwt_claims,
+    put_item_standard,
+    query_by_tenant,
+    increment_counter
 )
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # DynamoDB y S3
-dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')
-
-productos_table = dynamodb.Table(os.environ['PRODUCTOS_TABLE'])
-ventas_table = dynamodb.Table(os.environ['VENTAS_TABLE'])
-gastos_table = dynamodb.Table(os.environ['GASTOS_TABLE'])
-reportes_table = dynamodb.Table(os.environ['REPORTES_TABLE'])
-counters_table = dynamodb.Table(os.environ['COUNTERS_TABLE'])
 
 S3_BUCKET = os.environ.get('S3_BUCKET')
 
@@ -52,13 +47,14 @@ def handler(event, context):
         log_request(event)
         
         # JWT validation + tenant
-        tenant_id = get_tenant_id_from_jwt(event)
-        codigo_usuario = get_codigo_usuario_from_jwt(event)
+        tenant_id = extract_tenant_from_jwt_claims(event)
+        user_info = extract_user_from_jwt_claims(event)
+        codigo_usuario = user_info.get('codigo_usuario') if user_info else None
         
         # Parse body para fechas
         body = json.loads(event.get('body', '{}'))
         
-        lima_now = get_lima_datetime()
+        fecha_actual = obtener_fecha_hora_peru()
         
         # Fechas del reporte (default: últimos 7 días)
         if 'fecha_inicio' in body and 'fecha_fin' in body:
@@ -77,10 +73,11 @@ def handler(event, context):
         logger.info(f"📋 Generando reporte general: {tenant_id} ({fecha_inicio.strftime('%Y-%m-%d')} - {fecha_fin.strftime('%Y-%m-%d')})")
         
         # =================================================================
-        # GENERAR CÓDIGO DE REPORTE
+        # GENERAR CÓDIGO DE REPORTE CON TIENDA
         # =================================================================
         
-        codigo_reporte = generate_codigo(counters_table, tenant_id, "REPORTES", "R")
+        contador = increment_counter('SAAI_Counters', tenant_id, 'REPORTES')
+        codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
         # OBTENER TODOS LOS DATOS
@@ -285,7 +282,7 @@ def obtener_datos_ventas(tenant_id, fecha_inicio, fecha_fin):
             ExpressionAttributeValues={
                 ':inicio': fecha_inicio.strftime('%Y-%m-%d'),
                 ':fin': fecha_fin.strftime('%Y-%m-%d'),
-                ':estado': 'ACTIVO'
+                ':estado': 'COMPLETADA'  # Cambiar de 'ACTIVO' a 'COMPLETADA'
             }
         )
         return response.get('Items', [])
@@ -346,11 +343,13 @@ def construir_df_ventas(ventas_data):
         data = venta['data']
         datos.append({
             'Código': data.get('codigo_venta', ''),
-            'Fecha': data.get('fecha', '')[:10],
+            'Fecha': data.get('fecha', ''),  # Ya es sólo fecha YYYY-MM-DD
+            'Cliente': data.get('cliente', ''),
             'Total': float(data.get('total', 0)),
             'Método Pago': data.get('metodo_pago', ''),
-            'Items': len(data.get('productos', [])),
-            'Vendedor': data.get('codigo_usuario', '')
+            'Items': len(data.get('productos', [])),  # Cambiar de 'items' a 'productos'
+            'Vendedor': data.get('codigo_usuario', ''),
+            'Estado': data.get('estado', 'COMPLETADA')
         })
     
     return pd.DataFrame(datos)
@@ -369,7 +368,8 @@ def construir_df_gastos(gastos_data):
             'Descripción': data.get('descripcion', ''),
             'Categoría': data.get('categoria', ''),
             'Monto': float(data.get('monto', 0)),
-            'Registrado Por': data.get('codigo_usuario', '')
+            'Registrado Por': data.get('codigo_usuario', ''),  # Este campo sí existe en gastos
+            'Estado': data.get('estado', 'ACTIVO')
         })
     
     return pd.DataFrame(datos)
@@ -382,9 +382,9 @@ def construir_df_productos_top(ventas_data):
     productos_vendidos = {}
     
     for venta in ventas_data:
-        for producto in venta['data'].get('productos', []):
+        for producto in venta['data'].get('productos', []):  # Cambiar de 'items' a 'productos'
             codigo = producto.get('codigo_producto', '')
-            nombre = producto.get('nombre', codigo)
+            nombre = producto.get('nombre_producto', codigo)  # Cambiar de 'nombre' a 'nombre_producto'
             cantidad = int(producto.get('cantidad', 0))
             precio = float(producto.get('precio_unitario', 0))
             
@@ -397,7 +397,7 @@ def construir_df_productos_top(ventas_data):
                 }
             
             productos_vendidos[codigo]['Cantidad Vendida'] += cantidad
-            productos_vendidos[codigo]['Ingresos Total'] += cantidad * precio
+            productos_vendidos[codigo]['Ingresos Total'] += producto.get('subtotal_item', cantidad * precio)
     
     df = pd.DataFrame(list(productos_vendidos.values()))
     if not df.empty:
@@ -432,7 +432,7 @@ def construir_df_rentabilidad(inventario_data, ventas_data):
     
     # Agregar datos de ventas
     for venta in ventas_data:
-        for producto in venta['data'].get('productos', []):
+        for producto in venta['data'].get('productos', []):  # Cambiar de 'items' a 'productos'
             # Buscar categoría del producto (simplificado)
             codigo = producto.get('codigo_producto', '')
             categoria = 'Sin categoría'  # Default

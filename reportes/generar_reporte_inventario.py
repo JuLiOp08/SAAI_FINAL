@@ -11,22 +11,19 @@ from utils import (
     success_response,
     error_response,
     log_request,
-    get_lima_datetime,
-    get_tenant_id_from_jwt,
-    get_codigo_usuario_from_jwt,
-    generate_codigo
+    obtener_fecha_hora_peru,
+    extract_tenant_from_jwt_claims,
+    extract_user_from_jwt_claims,
+    put_item_standard,
+    query_by_tenant,
+    increment_counter
 )
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # DynamoDB y S3
-dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')
-
-productos_table = dynamodb.Table(os.environ['PRODUCTOS_TABLE'])
-reportes_table = dynamodb.Table(os.environ['REPORTES_TABLE'])
-counters_table = dynamodb.Table(os.environ['COUNTERS_TABLE'])
 
 S3_BUCKET = os.environ.get('S3_BUCKET')
 
@@ -50,10 +47,11 @@ def handler(event, context):
         log_request(event)
         
         # JWT validation + tenant
-        tenant_id = get_tenant_id_from_jwt(event)
-        codigo_usuario = get_codigo_usuario_from_jwt(event)
+        tenant_id = extract_tenant_from_jwt_claims(event)
+        user_info = extract_user_from_jwt_claims(event)
+        codigo_usuario = user_info.get('codigo_usuario') if user_info else None
         
-        lima_now = get_lima_datetime()
+        fecha_actual = obtener_fecha_hora_peru()
         
         logger.info(f"📋 Generando reporte inventario: {tenant_id}")
         
@@ -61,28 +59,18 @@ def handler(event, context):
         # OBTENER DATOS DE INVENTARIO
         # =================================================================
         
-        response = productos_table.query(
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':estado': 'ACTIVO'
-            }
-        )
-        
-        productos = response.get('Items', [])
+        result = query_by_tenant('SAAI_Productos', tenant_id)
+        productos = result.get('items', [])
         
         if not productos:
             return error_response("No hay productos activos para generar reporte", 400)
         
         # =================================================================
-        # GENERAR CÓDIGO DE REPORTE
+        # GENERAR CÓDIGO DE REPORTE CON TIENDA
         # =================================================================
         
-        codigo_reporte = generate_codigo(counters_table, tenant_id, "REPORTES", "R")
+        contador = increment_counter('SAAI_Counters', tenant_id, 'REPORTES')
+        codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
         # CONSTRUIR DATOS EXCEL
@@ -95,9 +83,9 @@ def handler(event, context):
         productos_bajo_stock = 0
         
         for producto in productos:
-            data = producto['data']
-            stock = int(data.get('stock', 0))
-            precio = float(data.get('precio', 0))
+            # Datos ya vienen filtrados por query_by_tenant (solo ACTIVOS)
+            stock = int(producto.get('stock', 0))
+            precio = float(producto.get('precio', 0))
             valor_total = stock * precio
             
             # Estadísticas
@@ -114,16 +102,16 @@ def handler(event, context):
                 estado_stock = "NORMAL"
             
             datos_excel.append({
-                'Código Producto': data.get('codigo_producto', ''),
-                'Nombre': data.get('nombre', ''),
-                'Categoría': data.get('categoria', ''),
-                'Marca': data.get('marca', ''),
+                'Código Producto': producto.get('codigo_producto', ''),
+                'Nombre': producto.get('nombre', ''),
+                'Categoría': producto.get('categoria', ''),
+                'Descripción': producto.get('descripcion', ''),
                 'Precio Unitario': precio,
                 'Stock Actual': stock,
-                'Stock Mínimo': int(data.get('stock_minimo', 0)),
                 'Estado Stock': estado_stock,
                 'Valor Total': valor_total,
-                'Fecha Creación': data.get('created_at', '')[:10]  # Solo fecha
+                'Fecha Creación': producto.get('created_at', '')[:10],  # Solo fecha
+                'Creado Por': producto.get('created_by', '')
             })
         
         # =================================================================
@@ -139,7 +127,7 @@ def handler(event, context):
             {'Métrica': 'Productos Sin Stock', 'Valor': productos_sin_stock},
             {'Métrica': 'Productos Bajo Stock', 'Valor': productos_bajo_stock},
             {'Métrica': 'Valor Total Inventario', 'Valor': f"S/ {total_valor:.2f}"},
-            {'Métrica': 'Fecha Generación', 'Valor': lima_now.strftime('%Y-%m-%d %H:%M:%S')}
+            {'Métrica': 'Fecha Generación', 'Valor': fecha_actual[:19]}  # YYYY-MM-DDTHH:mm:ss
         ])
         
         # =================================================================
@@ -175,7 +163,7 @@ def handler(event, context):
         excel_buffer.seek(0)
         
         # Subir a S3
-        fecha_str = lima_now.strftime('%Y%m%d_%H%M%S')
+        fecha_str = fecha_actual[:10].replace('-', '') + '_' + fecha_actual[11:19].replace(':', '')
         s3_key = f"{tenant_id}/reportes/inventario_{codigo_reporte}_{fecha_str}.xlsx"
         
         s3_client.put_object(
@@ -204,7 +192,7 @@ def handler(event, context):
         reporte_data = {
             "codigo_reporte": codigo_reporte,
             "tipo": "inventario",
-            "fecha_generacion": lima_now.isoformat(),
+            "fecha_generacion": fecha_actual,
             "parametros": {
                 "total_productos": total_productos,
                 "productos_sin_stock": productos_sin_stock,
@@ -215,14 +203,15 @@ def handler(event, context):
             "tamaño_bytes": len(excel_buffer.getvalue()),
             "generado_por": codigo_usuario,
             "estado": "COMPLETADO",
-            "created_at": lima_now.isoformat()
+            "created_at": fecha_actual
         }
         
-        reportes_table.put_item(Item={
-            'tenant_id': tenant_id,
-            'entity_id': codigo_reporte,
-            'data': reporte_data
-        })
+        put_item_standard(
+            'SAAI_Reportes',
+            tenant_id=tenant_id,
+            entity_id=codigo_reporte,
+            data=reporte_data
+        )
         
         logger.info(f"✅ Reporte inventario generado: {codigo_reporte}")
         

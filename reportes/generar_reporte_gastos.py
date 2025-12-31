@@ -11,22 +11,19 @@ from utils import (
     success_response,
     error_response,
     log_request,
-    get_lima_datetime,
-    get_tenant_id_from_jwt,
-    get_codigo_usuario_from_jwt,
-    generate_codigo
+    obtener_fecha_hora_peru,
+    extract_tenant_from_jwt_claims,
+    extract_user_from_jwt_claims,
+    put_item_standard,
+    query_by_tenant,
+    increment_counter
 )
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # DynamoDB y S3
-dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')
-
-gastos_table = dynamodb.Table(os.environ['GASTOS_TABLE'])
-reportes_table = dynamodb.Table(os.environ['REPORTES_TABLE'])
-counters_table = dynamodb.Table(os.environ['COUNTERS_TABLE'])
 
 S3_BUCKET = os.environ.get('S3_BUCKET')
 
@@ -50,13 +47,14 @@ def handler(event, context):
         log_request(event)
         
         # JWT validation + tenant
-        tenant_id = get_tenant_id_from_jwt(event)
-        codigo_usuario = get_codigo_usuario_from_jwt(event)
+        tenant_id = extract_tenant_from_jwt_claims(event)
+        user_info = extract_user_from_jwt_claims(event)
+        codigo_usuario = user_info.get('codigo_usuario') if user_info else None
         
         # Parse body para fechas
         body = json.loads(event.get('body', '{}'))
         
-        lima_now = get_lima_datetime()
+        fecha_actual = obtener_fecha_hora_peru()
         
         # Fechas del reporte (default: últimos 7 días)
         if 'fecha_inicio' in body and 'fecha_fin' in body:
@@ -99,10 +97,11 @@ def handler(event, context):
             return error_response("No hay gastos en el período seleccionado", 400)
         
         # =================================================================
-        # GENERAR CÓDIGO DE REPORTE
+        # GENERAR CÓDIGO DE REPORTE CON TIENDA
         # =================================================================
         
-        codigo_reporte = generate_codigo(counters_table, tenant_id, "REPORTES", "R")
+        contador = increment_counter('SAAI_Counters', tenant_id, 'REPORTES')
+        codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
         # CONSTRUIR DATOS EXCEL
@@ -129,7 +128,7 @@ def handler(event, context):
                 'Descripción': data.get('descripcion', ''),
                 'Categoría': categoria,
                 'Monto': monto,
-                'Registrado Por': data.get('codigo_usuario', ''),
+                'Registrado Por': data.get('created_by', ''),  # Cambiar de 'codigo_usuario' a 'created_by'
                 'Estado': data.get('estado', 'ACTIVO'),
                 'Fecha Registro': data.get('created_at', '')[:10] if data.get('created_at') else ''
             })

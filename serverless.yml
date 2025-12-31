@@ -322,7 +322,7 @@ functions:
   # ADMIN - REPORTES (S3 + Excel)
   # =================================================================
   GenerarReporteInventario:
-    handler: reports/generar_reporte_inventario.handler
+    handler: reportes/generar_reporte_inventario.handler
     description: Generar reporte Excel de inventario en S3
     timeout: 60
     events:
@@ -333,7 +333,7 @@ functions:
           authorizer: authorizer
 
   GenerarReporteVentas:
-    handler: reports/generar_reporte_ventas.handler
+    handler: reportes/generar_reporte_ventas.handler
     description: Generar reporte Excel de ventas en S3
     timeout: 60
     events:
@@ -344,7 +344,7 @@ functions:
           authorizer: authorizer
 
   GenerarReporteGastos:
-    handler: reports/generar_reporte_gastos.handler
+    handler: reportes/generar_reporte_gastos.handler
     description: Generar reporte Excel de gastos en S3
     timeout: 60
     events:
@@ -355,7 +355,7 @@ functions:
           authorizer: authorizer
 
   GenerarReporteGeneral:
-    handler: reports/generar_reporte_general.handler
+    handler: reportes/generar_reporte_general.handler
     description: Generar reporte Excel combinado en S3
     timeout: 60
     events:
@@ -366,7 +366,7 @@ functions:
           authorizer: authorizer
 
   ListarHistorialReportes:
-    handler: reports/listar_historial_reportes.handler
+    handler: reportes/listar_historial_reportes.handler
     description: Listar historial de reportes con presigned URLs
     events:
       - http:
@@ -446,7 +446,7 @@ functions:
   # NOTIFICACIONES
   # =================================================================
   ListarNotificaciones:
-    handler: notificaciones/listar_notificaciones.handler
+    handler: notificaciones/listarNotificaciones.handler
     description: Listar notificaciones del usuario
     events:
       - http:
@@ -459,7 +459,7 @@ functions:
   # SNS CONSUMERS (INTERNOS)
   # =================================================================
   GuardarNotificacion:
-    handler: notificaciones/guardar_notificacion.handler
+    handler: notificaciones/guardarNotificacion.handler
     description: Consumidor SNS - guarda alertas en t_notificaciones
     events:
       - sns:
@@ -528,18 +528,6 @@ functions:
   # =================================================================
   # FASE 5: SERVICIOS SNS Y NOTIFICACIONES
   # =================================================================
-
-  # =================================================================
-  # SISTEMA DE ALERTAS - Topic AlertasSAAI
-  # =================================================================
-  GuardarNotificacion:
-    handler: notificaciones/guardarNotificacion.handler
-    description: SNS→Lambda - Persiste alertas en t_notificaciones
-    events:
-      - sns:
-          arn:
-            Ref: AlertasSaaiTopic
-          topicName: AlertasSAAI-${self:provider.stage}
 
   # =================================================================
   # SISTEMA DE BIENVENIDA - Topic BienvenidaSAAI

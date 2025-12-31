@@ -8,6 +8,7 @@ from utils import (
     parse_request_body,
     log_request,
     extract_tenant_from_jwt_claims,
+    extract_user_from_jwt_claims,
     query_by_tenant
 )
 
@@ -46,6 +47,11 @@ def handler(event, context):
     try:
         log_request(event)
         
+        # Validar que el usuario sea SAAI
+        user_info = extract_user_from_jwt_claims(event)
+        if not user_info or user_info.get('rol') != 'SAAI':
+            return error_response("Solo usuarios SAAI pueden buscar tiendas", 403)
+        
         # Parse request body
         body = parse_request_body(event)
         if not body:
@@ -57,8 +63,9 @@ def handler(event, context):
         
         query_text = str(query).lower().strip()
         
-        # Obtener todas las tiendas
-        items = query_by_tenant(TIENDAS_TABLE, "SAAI")
+        # Obtener todas las tiendas (incluyendo INACTIVAS)
+        result = query_by_tenant(TIENDAS_TABLE, "SAAI", include_inactive=True)
+        items = result['items']
         
         # Buscar en nombre_tienda o codigo_tienda
         tiendas_encontradas = []
@@ -73,7 +80,10 @@ def handler(event, context):
                 tienda = {
                     'codigo_tienda': data.get('codigo_tienda'),
                     'nombre_tienda': data.get('nombre_tienda'),
-                    'estado': data.get('estado')
+                    'email_tienda': data.get('email_tienda'),
+                    'telefono': data.get('telefono'),
+                    'estado': data.get('estado'),
+                    'created_at': data.get('created_at', '').split('T')[0] if data.get('created_at') else None
                 }
                 tiendas_encontradas.append(tienda)
         

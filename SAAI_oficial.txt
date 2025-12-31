@@ -1216,7 +1216,7 @@ Response:
 {
   "success": true,
   "data": {
-    "codigo_reporte": "R001",
+    "codigo_reporte": "T002R001",
     "download_url": "https://s3.amazonaws.com/.../inventario.xlsx"
   }
 }
@@ -1254,7 +1254,7 @@ Response:
   "data": {
     "reportes": [
       {
-        "codigo_reporte": "R001",
+        "codigo_reporte": "T002R001",
         "tipo": "ventas",
         "fecha": "2025-11-08",
         "download_url": "https://s3.amazonaws.com/.../ventas.xlsx"
@@ -1754,9 +1754,9 @@ Path: /tiendas
 DESCRIPCIÓN:
 - Registra una nueva tienda (tenant)
 - Crea el usuario ADMIN de la tienda
-- Genera códigos usando t_counters
-- Dispara SNS de bienvenida
-- Crea carpeta en S3
+- Genera códigos usando generar_codigo_tienda() y generar_codigo_usuario()
+- Dispara SNS BienvenidaSAAI con datos de tienda y admin
+- Valida que el usuario tenga rol SAAI
 
 Request:
 {
@@ -1778,7 +1778,7 @@ Response:
   "message": "Tienda registrada correctamente",
   "data": {
     "codigo_tienda": "T002",
-    "codigo_usuario_admin": "A001",
+    "codigo_usuario_admin": "T002U001",
     "estado": "ACTIVA"
   }
 }
@@ -1894,6 +1894,8 @@ Path: /tiendas/{codigo_tienda}
 
 DESCRIPCIÓN:
 - Eliminación lógica (estado = ELIMINADA)
+- Agrega metadatos de auditoría (motivo_baja, fecha_baja, baja_por)
+- Valida que el usuario tenga rol SAAI
 
 Request:
 {
@@ -2242,7 +2244,7 @@ Propósito:
 •	Historial de reportes generados y su ubicación en S3.
 Key:
 •	tenant_id = codigo_tienda
-•	entity_id = codigo_reporte (ej. R001)
+•	entity_id = codigo_reporte (ej. T002R001)
 data (contiene):
 •	codigo_reporte, tipo (inventario/ventas/gastos/general)
 •	fecha_generacion (hora Perú)
