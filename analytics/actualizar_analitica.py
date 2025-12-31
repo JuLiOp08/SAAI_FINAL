@@ -198,7 +198,7 @@ def handler(event, context):
             }
             
             lambda_client.invoke(
-                FunctionName=os.environ['EMITIR_EVENTOS_WS_FUNCTION_ARN'],
+                FunctionName=os.environ['EMITIR_EVENTOS_WS_FUNCTION_NAME'],
                 InvocationType='Event',  # Async
                 Payload=json.dumps(event_payload)
             )
@@ -312,7 +312,7 @@ def calcular_inventario_actual(tenant_id):
             
             if stock == 0:
                 productos_sin_stock += 1
-            elif stock <= 5:  # Umbral stock bajo
+            elif stock <= THRESHOLD_STOCK_BAJO:
                 productos_bajo_stock += 1
         
         return {

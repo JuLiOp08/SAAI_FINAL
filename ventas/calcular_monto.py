@@ -42,24 +42,25 @@ def handler(event, context):
     Response:
     {
         "success": true,
+        "message": "Monto calculado",
         "data": {
-            "total": 125.50,
-            "productos": [
+            "items": [
                 {
                     "codigo_producto": "P001",
-                    "nombre_producto": "Producto 1",
+                    "nombre": "Producto 1",
                     "precio_unitario": 50.0,
                     "cantidad": 2,
-                    "subtotal_item": 100.0
+                    "subtotal": 100.0
                 },
                 {
                     "codigo_producto": "P002",
-                    "nombre_producto": "Producto 2", 
+                    "nombre": "Producto 2", 
                     "precio_unitario": 25.50,
                     "cantidad": 1,
-                    "subtotal_item": 25.50
+                    "subtotal": 25.50
                 }
-            ]
+            ],
+            "total": 125.50
         }
     }
     """
@@ -119,13 +120,13 @@ def handler(event, context):
             subtotal_item = precio_unitario * Decimal(str(cantidad))
             total_subtotal += subtotal_item
             
-            # Agregar producto calculado
+            # Agregar producto calculado según SAAI oficial (usa 'items', 'subtotal', 'nombre')
             producto_calculado = {
                 'codigo_producto': codigo_producto,
-                'nombre_producto': producto_data.get('nombre'),
+                'nombre': producto_data.get('nombre'),
                 'precio_unitario': decimal_to_float(precio_unitario),
                 'cantidad': cantidad,
-                'subtotal_item': decimal_to_float(subtotal_item)
+                'subtotal': decimal_to_float(subtotal_item)
             }
             
             productos_calculados.append(producto_calculado)
@@ -135,8 +136,8 @@ def handler(event, context):
         
         # Preparar response según documentación oficial SAAI
         calculation_data = {
-            'total': decimal_to_float(total),
-            'productos': productos_calculados
+            'items': productos_calculados,
+            'total': decimal_to_float(total)
         }
         
         logger.info(f"Calculado monto de venta para {len(productos)} productos en tienda {tenant_id}. Total: {decimal_to_float(total)}")

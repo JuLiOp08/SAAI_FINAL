@@ -161,46 +161,19 @@ def handler(event, context):
             try:
                 # Log de la acción (no envía correo real)
                 logger.info(f"Correo de bienvenida procesado para {correo_admin} - Tienda {tenant_id}")
-                # En un entorno completo, aquí iría la lógica de SNS o servicio externo
-                    Message={
-                        'Subject': {
-                            'Data': subject,
-                            'Charset': 'UTF-8'
-                        },
-                        'Body': {
-                            'Html': {
-                                'Data': html_body,
-                                'Charset': 'UTF-8'
-                            },
-                            'Text': {
-                                'Data': f"""
-¡Bienvenido a SAAI!
-
-Tu tienda {nombre_tienda} ({tenant_id}) ha sido registrada exitosamente.
-
-Funcionalidades disponibles:
-- Gestión de inventario
-- Registro de ventas 
-- Control de gastos
-- Gestión de usuarios
-- Analíticas y reportes
-- Alertas automáticas
-- Predicciones IA
-
-Email: {correo_admin}
-Contraseña: La que configuraste
-
-¿Necesitas ayuda?
-Email: soporte@saai.com
-WhatsApp: +51 999 888 777
-
-¡Gracias por elegir SAAI!
-                                """,
-                                'Charset': 'UTF-8'
-                            }
-                        }
-                    }
-                )
+                logger.info(f"Subject: 🎉 ¡Bienvenido a SAAI! - Tu tienda {nombre_tienda} está lista")
+                logger.info(f"Contenido HTML generado ({len(html_body)} caracteres)")
+                
+                # En AWS Academy, esto no se ejecuta realmente (Lambda está comentado en serverless.yml)
+                # Si se habilitara SES en el futuro, aquí iría:
+                # ses_client.send_email(
+                #     Source='noreply@saai.com',
+                #     Destination={'ToAddresses': [correo_admin]},
+                #     Message={
+                #         'Subject': {'Data': subject, 'Charset': 'UTF-8'},
+                #         'Body': {'Html': {'Data': html_body, 'Charset': 'UTF-8'}}
+                #     }
+                # )
                 
             except Exception as email_error:
                 logger.error(f"Error en placeholder de correo de bienvenida: {str(email_error)}")

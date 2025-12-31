@@ -171,8 +171,9 @@ def generar_codigo_notificacion(codigo_tienda):
         str: Código de notificación generado
     """
     try:
+        import os
         # Usar contador incremental para consistencia con el patrón del proyecto
-        contador = increment_counter('SAAI_Counters', codigo_tienda, 'NOTIFICACIONES')
+        contador = increment_counter(os.environ.get('COUNTERS_TABLE', 'SAAI_Counters'), codigo_tienda, 'NOTIFICACIONES')
         if contador:
             return f"{codigo_tienda}N{contador:03d}"
         else:

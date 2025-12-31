@@ -14,7 +14,7 @@ from utils import (
     extract_user_from_jwt_claims,
     query_by_tenant,
     put_item_standard,
-    increment_counter,
+    generar_codigo_usuario,
     obtener_fecha_hora_peru
 )
 
@@ -45,7 +45,7 @@ def handler(event, context):
         "success": true,
         "message": "Usuario creado",
         "data": {
-            "codigo_usuario": "U002"
+            "codigo_usuario": "T002U002"
         }
     }
     """
@@ -86,15 +86,13 @@ def handler(event, context):
             return validation_error_response("Email con formato inválido")
         
         # Validar email único en la tienda
-        items = query_by_tenant(USUARIOS_TABLE, tenant_id)
-        for item in items:
-            data = item.get('data', {})
-            if data.get('email') == email and data.get('estado') == 'ACTIVO':
+        result = query_by_tenant(USUARIOS_TABLE, tenant_id)
+        for item in result.get('items', []):
+            if item.get('email') == email and item.get('estado') == 'ACTIVO':
                 return error_response("Ya existe un usuario con este email en la tienda", 400)
         
-        # Generar código de usuario
-        contador = increment_counter(COUNTERS_TABLE, tenant_id, "USUARIOS")
-        codigo_usuario = f"U{contador:03d}"
+        # Generar código de usuario usando función de utils
+        codigo_usuario = generar_codigo_usuario(tenant_id)
         
         # Hash de la password con salt
         salt = os.urandom(32)

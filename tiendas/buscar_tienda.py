@@ -70,21 +70,19 @@ def handler(event, context):
         # Buscar en nombre_tienda o codigo_tienda
         tiendas_encontradas = []
         for item in items:
-            data = item.get('data', {})
-            
             # Buscar en nombre, código o email
-            nombre = data.get('nombre_tienda', '').lower()
-            codigo = data.get('codigo_tienda', '').lower()
-            email = data.get('email_tienda', '').lower()
+            nombre = item.get('nombre_tienda', '').lower()
+            codigo = item.get('codigo_tienda', '').lower()
+            email = item.get('email_tienda', '').lower()
             
             if query_text in nombre or query_text in codigo or query_text in email:
                 tienda = {
-                    'codigo_tienda': data.get('codigo_tienda'),
-                    'nombre_tienda': data.get('nombre_tienda'),
-                    'email_tienda': data.get('email_tienda'),
-                    'telefono': data.get('telefono'),
-                    'estado': data.get('estado'),
-                    'created_at': data.get('created_at', '').split('T')[0] if data.get('created_at') else None
+                    'codigo_tienda': item.get('codigo_tienda'),
+                    'nombre_tienda': item.get('nombre_tienda'),
+                    'email_tienda': item.get('email_tienda'),
+                    'telefono': item.get('telefono'),
+                    'estado': item.get('estado'),
+                    'created_at': item.get('created_at', '').split('T')[0] if item.get('created_at') else None
                 }
                 tiendas_encontradas.append(tienda)
         

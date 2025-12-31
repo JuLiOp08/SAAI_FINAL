@@ -42,7 +42,7 @@ def handler(event, context):
         "success": true,
         "message": "Gasto registrado",
         "data": {
-            "codigo_gasto": "G001"
+            "codigo_gasto": "T002G001"
         }
     }
     """

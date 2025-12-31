@@ -36,7 +36,7 @@ def handler(event, context):
         "data": {
             "usuarios": [
                 {
-                    "codigo_usuario": "U002",
+                    "codigo_usuario": "T002U002",
                     "nombre": "Juan Perez",
                     "email": "juan@tienda.com",
                     "role": "worker"
@@ -55,31 +55,29 @@ def handler(event, context):
             return error_response("Token inválido - no se encontró codigo_tienda", 401)
         
         # Extraer parámetros de paginación SAAI 1.6
-        limit, next_token = extract_pagination_params(event)
+        pagination = extract_pagination_params(event, default_limit=50, max_limit=100)
         
         # Consultar usuarios de la tienda con paginación
         result = query_by_tenant(
             USUARIOS_TABLE, 
             tenant_id,
-            limit=limit,
-            next_token=next_token
+            limit=pagination['limit'],
+            last_evaluated_key=pagination.get('exclusive_start_key')
         )
         
         items = result.get('items', [])
         last_evaluated_key = result.get('last_evaluated_key')
         
-        # Formatear respuesta
+        # Formatear respuesta (query_by_tenant filtra INACTIVOS automáticamente)
         usuarios = []
         for item in items:
-            data = item.get('data', {})
-            if data.get('estado') == 'ACTIVO':
-                usuario = {
-                    'codigo_usuario': data.get('codigo_usuario'),
-                    'nombre': data.get('nombre'),
-                    'email': data.get('email'),
-                    'role': data.get('role')
-                }
-                usuarios.append(usuario)
+            usuario = {
+                'codigo_usuario': item.get('codigo_usuario'),
+                'nombre': item.get('nombre'),
+                'email': item.get('email'),
+                'role': item.get('role')
+            }
+            usuarios.append(usuario)
         
         logger.info(f"Usuarios listados: {len(usuarios)} para tienda {tenant_id}")
         

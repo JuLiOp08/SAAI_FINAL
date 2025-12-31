@@ -36,7 +36,7 @@ def handler(event, context):
         "success": true,
         "data": [
             {
-                "codigo_gasto": "G001",
+                "codigo_gasto": "T002G001",
                 "descripcion": "Pago proveedor",
                 "monto": 150.0,
                 "categoria": "proveedores",

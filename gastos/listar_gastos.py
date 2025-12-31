@@ -8,9 +8,10 @@ from utils import (
     log_request,
     extract_tenant_from_jwt_claims,
     query_by_tenant,
-    decimal_to_float
+    decimal_to_float,
+    extract_pagination_params,
+    create_next_token
 )
-from utils.pagination_utils import extract_pagination_params, create_next_token
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -28,7 +29,7 @@ def handler(event, context):
         "data": {
             "gastos": [
                 {
-                    "codigo_gasto": "G001",
+                    "codigo_gasto": "T002G001",
                     "descripcion": "Pago proveedor",
                     "monto": 150.0,
                     "fecha": "2025-11-08"

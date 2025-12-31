@@ -49,7 +49,7 @@ def handler(event, context):
         
         # Validar que el usuario sea SAAI
         user_info = extract_user_from_jwt_claims(event)
-        if not user_info or user_info.get('rol') != 'SAAI':
+        if not user_info or user_info.get('rol') != 'saai':
             return error_response("Solo usuarios SAAI pueden listar tiendas", 403)
         
         # Extraer parámetros de paginación
@@ -67,15 +67,14 @@ def handler(event, context):
         # Formatear respuesta
         tiendas = []
         for item in result['items']:
-            data = item.get('data', {})
             # Incluir todas las tiendas (ACTIVA, SUSPENDIDA, ELIMINADA)
             tienda = {
-                'codigo_tienda': data.get('codigo_tienda'),
-                'nombre_tienda': data.get('nombre_tienda'),
-                'email_tienda': data.get('email_tienda'),
-                'telefono': data.get('telefono'),
-                'estado': data.get('estado'),
-                'created_at': data.get('created_at', '').split('T')[0] if data.get('created_at') else None
+                'codigo_tienda': item.get('codigo_tienda'),
+                'nombre_tienda': item.get('nombre_tienda'),
+                'email_tienda': item.get('email_tienda'),
+                'telefono': item.get('telefono'),
+                'estado': item.get('estado'),
+                'created_at': item.get('created_at', '').split('T')[0] if item.get('created_at') else None
             }
             tiendas.append(tienda)
         

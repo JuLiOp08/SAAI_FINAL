@@ -59,7 +59,7 @@ def handler(event, context):
         # OBTENER DATOS DE INVENTARIO
         # =================================================================
         
-        result = query_by_tenant('SAAI_Productos', tenant_id)
+        result = query_by_tenant(os.environ['PRODUCTOS_TABLE'], tenant_id)
         productos = result.get('items', [])
         
         if not productos:
@@ -69,7 +69,7 @@ def handler(event, context):
         # GENERAR CÓDIGO DE REPORTE CON TIENDA
         # =================================================================
         
-        contador = increment_counter('SAAI_Counters', tenant_id, 'REPORTES')
+        contador = increment_counter(os.environ['COUNTERS_TABLE'], tenant_id, 'REPORTES')
         codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
@@ -207,7 +207,7 @@ def handler(event, context):
         }
         
         put_item_standard(
-            'SAAI_Reportes',
+            os.environ['REPORTES_TABLE'],
             tenant_id=tenant_id,
             entity_id=codigo_reporte,
             data=reporte_data

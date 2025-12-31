@@ -37,7 +37,7 @@ def handler(event, context):
         "success": true,
         "message": "Usuario eliminado",
         "data": {
-            "codigo_usuario": "U002"
+            "codigo_usuario": "T002U002"
         }
     }
     """
@@ -63,11 +63,9 @@ def handler(event, context):
         motivo = body.get('motivo', 'Eliminado por el administrador') if body else 'Eliminado por el administrador'
         
         # Verificar que el usuario existe
-        item = get_item_standard(USUARIOS_TABLE, tenant_id, codigo_usuario)
-        if not item:
+        usuario_data = get_item_standard(USUARIOS_TABLE, tenant_id, codigo_usuario)
+        if not usuario_data:
             return error_response("Usuario no encontrado", 404)
-        
-        usuario_data = item['data']
         
         # Verificar que el usuario está activo
         if usuario_data.get('estado') != 'ACTIVO':

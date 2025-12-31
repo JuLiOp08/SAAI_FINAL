@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 # Tablas DynamoDB
 WS_CONNECTIONS_TABLE = os.environ.get('WS_CONNECTIONS_TABLE')
 # Variables de entorno para WebSocket
-WEBSOCKET_ENDPOINT = os.environ.get('WEBSOCKET_ENDPOINT')
+WS_API_ENDPOINT = os.environ.get('WS_API_ENDPOINT')
 REGION = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
 
 def handler(event, context):
@@ -104,8 +104,8 @@ def handler(event, context):
             }
         
         # Preparar cliente para envío de mensajes WebSocket
-        if not WEBSOCKET_ENDPOINT:
-            logger.error("WEBSOCKET_ENDPOINT no configurado")
+        if not WS_API_ENDPOINT:
+            logger.error("WS_API_ENDPOINT no configurado")
             return {
                 'statusCode': 500,
                 'body': json.dumps({'error': 'WebSocket endpoint no configurado'})
@@ -113,7 +113,7 @@ def handler(event, context):
         
         apigateway_management = boto3.client(
             'apigatewaymanagementapi',
-            endpoint_url=WEBSOCKET_ENDPOINT,
+            endpoint_url=WS_API_ENDPOINT,
             region_name=REGION
         )
         

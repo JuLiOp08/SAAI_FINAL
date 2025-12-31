@@ -36,7 +36,7 @@ def handler(event, context):
         "success": true,
         "message": "Gasto eliminado",
         "data": {
-            "codigo_gasto": "G001"
+            "codigo_gasto": "T002G001"
         }
     }
     """

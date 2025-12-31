@@ -76,7 +76,7 @@ def handler(event, context):
         # OBTENER DATOS DE VENTAS
         # =================================================================
         
-        result = query_by_tenant('SAAI_Ventas', tenant_id)
+        result = query_by_tenant(os.environ['VENTAS_TABLE'], tenant_id)
         todas_ventas = result.get('items', [])
         
         # Filtrar por fechas y estado
@@ -94,7 +94,7 @@ def handler(event, context):
         # GENERAR CÓDIGO DE REPORTE CON TIENDA
         # =================================================================
         
-        contador = increment_counter('SAAI_Counters', tenant_id, 'REPORTES')
+        contador = increment_counter(os.environ['COUNTERS_TABLE'], tenant_id, 'REPORTES')
         codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
@@ -125,12 +125,12 @@ def handler(event, context):
             })
             
             # Acumular productos vendidos
-            for producto in venta.get('productos', []):  # Cambiar de 'items' a 'productos'
+            for producto in venta.get('productos', []):
                 codigo = producto.get('codigo_producto', '')
-                nombre = producto.get('nombre_producto', codigo)  # Cambiar de 'nombre' a 'nombre_producto'
+                nombre = producto.get('nombre', codigo)
                 cantidad = int(producto.get('cantidad', 0))
                 precio = float(producto.get('precio_unitario', 0))
-                subtotal = float(producto.get('subtotal_item', 0))  # Usar subtotal_item calculado
+                subtotal = float(producto.get('subtotal', 0))
                 
                 if codigo not in datos_productos_vendidos:
                     datos_productos_vendidos[codigo] = {
@@ -253,7 +253,7 @@ def handler(event, context):
         }
         
         put_item_standard(
-            'SAAI_Reportes',
+            os.environ['REPORTES_TABLE'],
             tenant_id=tenant_id,
             entity_id=codigo_reporte,
             data=reporte_data

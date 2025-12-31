@@ -52,6 +52,7 @@ provider:
     # Restricciones de rutas por rol
     RESTRICTED_PATHS_WORKER: /gastos,/analytics,/reportes
     # Lambda ARNs para invocaciones internas
+    EMITIR_EVENTOS_WS_FUNCTION_NAME: "${self:service}-${self:provider.stage}-EmitirEventosWs"
     EMITIR_EVENTOS_WS_FUNCTION_ARN:
       Fn::Join:
         - ":"

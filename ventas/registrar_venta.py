@@ -33,9 +33,11 @@ SNS_TOPIC_ARN = os.environ.get('ALERTAS_SNS_TOPIC_ARN')
 # WebSocket API para notificaciones en tiempo real
 WEBSOCKET_API_ENDPOINT = os.environ.get('WEBSOCKET_API_ENDPOINT')
 
+# Nombre de función Lambda para WebSocket (desde env var)
+EMITIR_EVENTOS_WS_FUNCTION_NAME = os.environ.get('EMITIR_EVENTOS_WS_FUNCTION_NAME')
+
 # Inicializar clientes AWS
 sns = boto3.client('sns')
-apigateway = boto3.client('apigatewaymanagementapi', endpoint_url=WEBSOCKET_API_ENDPOINT)
 lambda_client = boto3.client('lambda')
 
 def handler(event, context):
@@ -268,7 +270,7 @@ def handler(event, context):
             }
             
             lambda_client.invoke(
-                FunctionName=f"saai-{os.environ.get('STAGE', 'dev')}-EmitirEventosWs",
+                FunctionName=EMITIR_EVENTOS_WS_FUNCTION_NAME,
                 InvocationType='Event',  # Async
                 Payload=json.dumps(event_payload)
             )

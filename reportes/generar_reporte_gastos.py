@@ -93,7 +93,7 @@ def handler(event, context):
         # GENERAR CÓDIGO DE REPORTE CON TIENDA
         # =================================================================
         
-        contador = increment_counter('SAAI_Counters', tenant_id, 'REPORTES')
+        contador = increment_counter(os.environ['COUNTERS_TABLE'], tenant_id, 'REPORTES')
         codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
