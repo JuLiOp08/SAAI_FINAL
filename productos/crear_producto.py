@@ -11,7 +11,7 @@ from utils import (
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
     put_item_standard,
-    increment_counter,
+    generar_codigo_producto,
     obtener_fecha_hora_peru
 )
 
@@ -20,7 +20,6 @@ logger.setLevel(logging.INFO)
 
 # Tablas DynamoDB
 PRODUCTOS_TABLE = os.environ.get('PRODUCTOS_TABLE')
-COUNTERS_TABLE = os.environ.get('COUNTERS_TABLE')
 
 def handler(event, context):
     """
@@ -85,9 +84,8 @@ def handler(event, context):
         except (ValueError, TypeError):
             return validation_error_response("Stock debe ser un número entero")
         
-        # Generar código de producto
-        contador = increment_counter(COUNTERS_TABLE, tenant_id, "PRODUCTOS")
-        codigo_producto = f"{tenant_id}P{contador:03d}"
+        # Generar código de producto usando utils
+        codigo_producto = generar_codigo_producto(tenant_id)
         
         # Crear entidad producto
         fecha_actual = obtener_fecha_hora_peru()

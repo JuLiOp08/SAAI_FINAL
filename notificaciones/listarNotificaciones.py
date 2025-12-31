@@ -7,7 +7,8 @@ from utils import (
     log_request,
     extract_tenant_from_jwt_claims,
     query_by_tenant,
-    paginate_results
+    extract_pagination_params,
+    create_next_token
 )
 
 logger = logging.getLogger()
@@ -49,30 +50,29 @@ def handler(event, context):
         if not tenant_id:
             return error_response("Token inválido - no se encontró codigo_tienda", 401)
         
-        # Parse query parameters
-        query_params = event.get('queryStringParameters') or {}
+        # Extraer parámetros de paginación según SAAI oficial 1.6
+        pagination = extract_pagination_params(event, default_limit=50)
         
-        # Obtener todas las notificaciones activas
-        notificaciones_response = query_by_tenant(
-            NOTIFICACIONES_TABLE,
-            tenant_id,
-            filter_expression="attribute_exists(#data) AND #data.estado = :estado",
-            expression_attribute_names={"#data": "data"},
-            expression_attribute_values={":estado": "ACTIVO"}
+        # Parse query parameters para filtros opcionales
+        query_params = event.get('queryStringParameters') or {}
+        severidad = query_params.get('severidad')  # INFO, CRITICAL
+        tipo = query_params.get('tipo')  # sinStock, bajoStock, etc.
+        fecha_inicio = query_params.get('fecha_inicio')  # YYYY-MM-DD
+        fecha_fin = query_params.get('fecha_fin')  # YYYY-MM-DD
+        
+        # Usar query_by_tenant optimizada que filtra INACTIVOS automáticamente
+        result = query_by_tenant(
+            table_name=NOTIFICACIONES_TABLE,
+            tenant_id=tenant_id,
+            limit=pagination['limit'],
+            last_evaluated_key=pagination['exclusive_start_key']
         )
         
-        notificaciones = notificaciones_response.get('Items', [])
+        notificaciones = result.get('items', [])
         
-        # Aplicar filtros opcionales
-        severidad = query_params.get('severidad')
-        tipo = query_params.get('tipo')
-        fecha_inicio = query_params.get('fecha_inicio')
-        fecha_fin = query_params.get('fecha_fin')
-        
+        # Aplicar filtros opcionales en memoria
         filtered_notificaciones = []
-        for item in notificaciones:
-            notificacion_data = item.get('data', {})
-            
+        for notificacion_data in notificaciones:
             # Filtro por severidad
             if severidad and notificacion_data.get('severidad', '').upper() != severidad.upper():
                 continue
@@ -88,7 +88,7 @@ def handler(event, context):
             if fecha_fin and fecha_notif > fecha_fin:
                 continue
             
-            # Preparar respuesta de notificación
+            # Preparar respuesta según formato SAAI oficial
             notificacion_response = {
                 'codigo_notificacion': notificacion_data.get('codigo_notificacion'),
                 'tipo': notificacion_data.get('tipo'),
@@ -99,6 +99,10 @@ def handler(event, context):
                 'origen': notificacion_data.get('origen')
             }
             
+            # Solo incluir detalle si existe
+            if notificacion_data.get('detalle'):
+                notificacion_response['detalle'] = notificacion_data['detalle']
+            
             filtered_notificaciones.append(notificacion_response)
         
         # Ordenar por fecha descendente (más recientes primero)
@@ -107,20 +111,21 @@ def handler(event, context):
             reverse=True
         )
         
-        # Aplicar paginación
-        limit = int(query_params.get('limit', 50))
-        last_key = query_params.get('last_evaluated_key')
+        # Preparar respuesta según formato SAAI oficial
+        response_data = {
+            "notificaciones": filtered_notificaciones
+        }
         
-        paginated_response = paginate_results(filtered_notificaciones, limit, last_key)
+        # Agregar next_token según SAAI oficial 1.6 si hay más páginas
+        last_evaluated_key = result.get('last_evaluated_key')
+        if last_evaluated_key:
+            next_token = create_next_token(last_evaluated_key)
+            if next_token:
+                response_data["next_token"] = next_token
         
-        logger.info(f"Listadas {len(paginated_response['data'])} notificaciones para tienda {tenant_id}")
+        logger.info(f"Listadas {len(filtered_notificaciones)} notificaciones para tienda {tenant_id}")
         
-        return success_response(
-            data={
-                "notificaciones": paginated_response['data'],
-                "next_token": paginated_response['pagination']['last_evaluated_key']
-            }
-        )
+        return success_response(data=response_data)
         
     except Exception as e:
         logger.error(f"Error listando notificaciones: {str(e)}")

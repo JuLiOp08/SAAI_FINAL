@@ -8,7 +8,7 @@ from utils import (
     error_response,
     log_request,
     put_item_standard,
-    increment_counter,
+    generar_codigo_notificacion,
     obtener_fecha_hora_peru
 )
 
@@ -17,7 +17,6 @@ logger.setLevel(logging.INFO)
 
 # Tablas DynamoDB
 NOTIFICACIONES_TABLE = os.environ.get('NOTIFICACIONES_TABLE')
-COUNTERS_TABLE = os.environ.get('COUNTERS_TABLE')
 
 def handler(event, context):
     """
@@ -82,9 +81,11 @@ def handler(event, context):
             mensaje = message_data.get('mensaje', 'Sin mensaje')
             detalle = message_data.get('detalle', {})
             
-            # Generar código de notificación
-            contador = increment_counter(COUNTERS_TABLE, tenant_id, "NOTIFICACIONES")
-            codigo_notificacion = f"N{contador:03d}"
+            # Generar código de notificación usando función centralizada
+            codigo_notificacion = generar_codigo_notificacion(tenant_id)
+            if not codigo_notificacion:
+                logger.error(f"Error generando código de notificación para tenant {tenant_id}")
+                continue
             
             # Crear entidad notificación
             fecha_actual = obtener_fecha_hora_peru()

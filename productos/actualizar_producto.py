@@ -11,7 +11,7 @@ from utils import (
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
     get_item_standard,
-    put_item_standard,
+    update_item_standard,
     obtener_fecha_hora_peru
 )
 
@@ -66,30 +66,27 @@ def handler(event, context):
         if not body:
             return validation_error_response("Request body requerido")
         
-        # Verificar que el producto existe
+        # Verificar que el producto existe y está activo
         item = get_item_standard(PRODUCTOS_TABLE, tenant_id, codigo_producto)
         if not item:
             return error_response("Producto no encontrado", 404)
         
-        producto_data = item['data']
-        
-        # Verificar que el producto está activo
-        if producto_data.get('estado') != 'ACTIVO':
+        if item.get('estado') != 'ACTIVO':
             return error_response("No se puede actualizar un producto inactivo", 400)
         
-        # Actualizar campos permitidos
+        # Preparar updates - solo campos que se envían en el request
+        updates = {}
         fecha_actual = obtener_fecha_hora_peru()
         
-        # Solo actualizar campos que se envían en el request
         if 'nombre' in body:
-            producto_data['nombre'] = str(body['nombre']).strip()
+            updates['nombre'] = str(body['nombre']).strip()
         
         if 'precio' in body:
             try:
                 precio = float(body['precio'])
                 if precio <= 0:
                     return validation_error_response("El precio debe ser mayor a 0")
-                producto_data['precio'] = Decimal(str(precio))
+                updates['precio'] = Decimal(str(precio))
             except (ValueError, TypeError):
                 return validation_error_response("Precio debe ser un número válido")
         
@@ -98,27 +95,27 @@ def handler(event, context):
                 stock = int(body['stock'])
                 if stock < 0:
                     return validation_error_response("El stock debe ser mayor o igual a 0")
-                producto_data['stock'] = stock
+                updates['stock'] = stock
             except (ValueError, TypeError):
                 return validation_error_response("Stock debe ser un número entero")
         
         if 'categoria' in body:
-            producto_data['categoria'] = str(body['categoria']).strip()
+            updates['categoria'] = str(body['categoria']).strip()
         
         if 'descripcion' in body:
-            producto_data['descripcion'] = str(body['descripcion']).strip()
+            updates['descripcion'] = str(body['descripcion']).strip()
         
         # Actualizar metadatos
-        producto_data['updated_at'] = fecha_actual
+        updates['updated_at'] = fecha_actual
         if codigo_usuario:
-            producto_data['updated_by'] = codigo_usuario
+            updates['updated_by'] = codigo_usuario
         
-        # Guardar en DynamoDB
-        put_item_standard(
+        # Actualizar usando update_item_standard (más eficiente)
+        update_item_standard(
             PRODUCTOS_TABLE,
             tenant_id=tenant_id,
             entity_id=codigo_producto,
-            data=producto_data
+            data_updates=updates
         )
         
         logger.info(f"Producto actualizado: {codigo_producto} en tienda {tenant_id}")

@@ -6,7 +6,9 @@ from utils import (
     error_response,
     log_request,
     extract_tenant_from_jwt_claims,
-    query_by_tenant
+    query_by_tenant,
+    extract_pagination_params,
+    create_next_token
 )
 
 logger = logging.getLogger()
@@ -17,27 +19,18 @@ PRODUCTOS_TABLE = os.environ.get('PRODUCTOS_TABLE')
 
 def handler(event, context):
     """
-    GET /productos - Listar productos de la tienda
+    GET /productos - Listar productos de la tienda con paginación SAAI 1.6
     
-    Según documento SAAI (TRABAJADOR):
-    Request:
-    {
-        "body": {}
-    }
+    Query Parameters:
+    - limit: número máximo de items por página (default: 50, max: 100)
+    - next_token: token para la siguiente página
     
     Response:
     {
         "success": true,
         "data": {
-            "productos": [
-                {
-                    "codigo_producto": "T002P001",
-                    "nombre": "Coca Cola 500ml",
-                    "precio": 3.5,
-                    "stock": 12,
-                    "categoria": "bebidas"
-                }
-            ]
+            "productos": [...],
+            "next_token": "base64_encoded_token"  // Solo si hay más páginas
         }
     }
     """
@@ -49,28 +42,42 @@ def handler(event, context):
         if not tenant_id:
             return error_response("Token inválido - no se encontró codigo_tienda", 401)
         
-        # Consultar productos de la tienda (solo ACTIVOS)
-        items = query_by_tenant(PRODUCTOS_TABLE, tenant_id)
+        # Extraer parámetros de paginación según SAAI 1.6
+        pagination = extract_pagination_params(event, default_limit=50, max_limit=100)
         
-        # Filtrar solo productos activos y formatear respuesta
+        # Consultar productos de la tienda (filtra INACTIVOS automáticamente)
+        result = query_by_tenant(
+            PRODUCTOS_TABLE, 
+            tenant_id,
+            limit=pagination['limit'],
+            last_evaluated_key=pagination['exclusive_start_key']
+        )
+        
+        # Formatear respuesta
         productos = []
-        for item in items:
-            data = item.get('data', {})
-            if data.get('estado') == 'ACTIVO':
-                producto = {
-                    'codigo_producto': data.get('codigo_producto'),
-                    'nombre': data.get('nombre'),
-                    'precio': float(data.get('precio', 0)),
-                    'stock': int(data.get('stock', 0)),
-                    'categoria': data.get('categoria')
-                }
-                productos.append(producto)
+        for item in result.get('items', []):
+            # Los items ya están filtrados (solo ACTIVOS) por query_by_tenant
+            producto = {
+                'codigo_producto': item.get('codigo_producto'),
+                'nombre': item.get('nombre'),
+                'precio': float(item.get('precio', 0)),
+                'stock': int(item.get('stock', 0)),
+                'categoria': item.get('categoria')
+            }
+            productos.append(producto)
+        
+        # Preparar respuesta con paginación
+        response_data = {"productos": productos}
+        
+        # Agregar next_token si hay más páginas
+        if result.get('last_evaluated_key'):
+            next_token = create_next_token(result['last_evaluated_key'])
+            if next_token:
+                response_data["next_token"] = next_token
         
         logger.info(f"Productos listados: {len(productos)} para tienda {tenant_id}")
         
-        return success_response(
-            data={"productos": productos}
-        )
+        return success_response(data=response_data)
         
     except Exception as e:
         logger.error(f"Error listando productos: {str(e)}")
