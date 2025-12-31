@@ -1,24 +1,18 @@
 # analytics/ver_analitica.py
 import os
-import json
 import logging
-import boto3
-from datetime import datetime, timedelta
-from boto3.dynamodb.conditions import Key
+from datetime import datetime, timedelta, timezone
 from utils import (
     success_response,
     error_response,
-    log_request,
-    get_lima_datetime,
-    get_tenant_id_from_jwt
+    extract_tenant_from_jwt_claims,
+    obtener_fecha_hora_peru,
+    get_item_standard,
+    query_by_tenant
 )
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# DynamoDB
-dynamodb = boto3.resource('dynamodb')
-analitica_table = dynamodb.Table(os.environ['ANALITICA_TABLE'])
 
 def handler(event, context):
     """
@@ -26,6 +20,10 @@ def handler(event, context):
     
     Devuelve métricas analíticas previamente calculadas.
     NO recalcula, solo consulta t_analitica.
+    
+    Este endpoint es la ÚNICA FUENTE DE VERDAD para datos analíticos.
+    El frontend debe hacer refetch a este endpoint cuando reciba
+    notificaciones WebSocket de tipo 'analitica_actualizada'.
     
     Query params: ?periodo=7 (días)
     
@@ -44,17 +42,17 @@ def handler(event, context):
     }
     """
     try:
-        log_request(event)
-        
         # JWT validation + tenant
-        tenant_id = get_tenant_id_from_jwt(event)
+        tenant_id = extract_tenant_from_jwt_claims(event)
+        if not tenant_id:
+            return error_response("Token inválido - tenant_id faltante", 401)
         
         # Query params
         query_params = event.get('queryStringParameters') or {}
         periodo_dias = int(query_params.get('periodo', 7))
         
         # Calcular rango de fechas
-        lima_now = get_lima_datetime()
+        lima_now = datetime.now(timezone.utc)  # Usar UTC para cálculos
         fecha_fin = lima_now
         fecha_inicio = lima_now - timedelta(days=periodo_dias - 1)
         
@@ -63,19 +61,17 @@ def handler(event, context):
         logger.info(f"📊 Consultando analítica: {tenant_id} - {entity_id}")
         
         # =================================================================
-        # CONSULTAR t_analitica
+        # CONSULTAR t_analitica usando utils
         # =================================================================
         
         try:
-            response = analitica_table.get_item(
-                Key={
-                    'tenant_id': tenant_id,
-                    'entity_id': entity_id
-                }
+            analitica_data = get_item_standard(
+                table_name=os.environ['ANALITICA_TABLE'],
+                tenant_id=tenant_id,
+                entity_id=entity_id
             )
             
-            if 'Item' in response:
-                analitica_data = response['Item']['data']
+            if analitica_data:
                 logger.info(f"✅ Analítica encontrada: {entity_id}")
                 return success_response(data=analitica_data)
             
@@ -83,20 +79,25 @@ def handler(event, context):
             logger.error(f"Error consultando analítica específica: {str(e)}")
         
         # =================================================================
-        # SI NO EXISTE EL PERÍODO EXACTO, BUSCAR EL MÁS RECIENTE
+        # SI NO EXISTE EL PERÍODO EXACTO, BUSCAR EL MÁS RECIENTE usando utils
         # =================================================================
         
         try:
-            # Query analíticas de esta tienda, ordenadas por entity_id (fecha)
-            response = analitica_table.query(
-                KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-                ScanIndexForward=False,  # Orden descendente (más reciente primero)
-                Limit=1
+            # Query analíticas de esta tienda usando utils
+            result = query_by_tenant(
+                table_name=os.environ['ANALITICA_TABLE'],
+                tenant_id=tenant_id,
+                limit=1
             )
             
-            items = response.get('Items', [])
+            items = result.get('items', [])
             if items:
-                analitica_data = items[0]['data']
+                # Tomar la más reciente (primera en la lista)
+                analitica_data = items[0]
+                # Remover las keys internas agregadas por query_by_tenant
+                analitica_data.pop('_tenant_id', None)
+                analitica_data.pop('_entity_id', None)
+                
                 logger.info(f"📊 Analítica más reciente encontrada")
                 return success_response(data=analitica_data)
             

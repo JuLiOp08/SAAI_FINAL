@@ -136,15 +136,12 @@ def actualizar_ultimo_uso_token(tenant_id, codigo_usuario, rol):
         if not tabla_tokens:
             return False
         
-        return update_item_standard(
-            tabla_tokens, 
-            tenant_id, 
-            codigo_usuario,
-            {
-                'ultimo_uso': obtener_fecha_hora_peru(),
-                'usos_total': 'INCREMENT'  # TODO: Implementar contador
-            }
-        )
+        # Obtener token actual y actualizar usando put_item_standard
+        token_data = get_item_standard(tabla_tokens, tenant_id, codigo_usuario)
+        if token_data:
+            token_data['ultimo_uso'] = obtener_fecha_hora_peru()
+            return put_item_standard(tabla_tokens, tenant_id, codigo_usuario, token_data)
+        return False
         
     except Exception as e:
         logger.error(f"Error actualizando último uso de token: {e}")
@@ -168,16 +165,16 @@ def invalidar_token(tenant_id, codigo_usuario, rol, motivo='LOGOUT_MANUAL'):
         if not tabla_tokens:
             return False
         
-        return update_item_standard(
-            tabla_tokens,
-            tenant_id,
-            codigo_usuario,
-            {
+        # Obtener token actual y actualizar usando put_item_standard
+        token_data = get_item_standard(tabla_tokens, tenant_id, codigo_usuario)
+        if token_data:
+            token_data.update({
                 'estado': 'INACTIVO',
                 'fecha_invalidacion': obtener_fecha_hora_peru(),
                 'motivo_invalidacion': motivo
-            }
-        )
+            })
+            return put_item_standard(tabla_tokens, tenant_id, codigo_usuario, token_data)
+        return False
         
     except Exception as e:
         logger.error(f"Error invalidando token: {e}")
@@ -324,17 +321,17 @@ def renovar_token(tenant_id, codigo_usuario, rol, nuevo_token):
         ahora_utc = datetime.now(timezone.utc)
         nueva_expiracion = ahora_utc + timedelta(seconds=JWT_EXPIRES_IN)
         
-        return update_item_standard(
-            tabla_tokens,
-            tenant_id,
-            codigo_usuario,
-            {
+        # Obtener token actual y actualizar usando put_item_standard
+        token_data = get_item_standard(tabla_tokens, tenant_id, codigo_usuario)
+        if token_data:
+            token_data.update({
                 'token': nuevo_token,
                 'renovado_en': obtener_fecha_hora_peru(),
                 'expira_en': nueva_expiracion.isoformat(),
                 'ultimo_uso': obtener_fecha_hora_peru()
-            }
-        )
+            })
+            return put_item_standard(tabla_tokens, tenant_id, codigo_usuario, token_data)
+        return False
         
     except Exception as e:
         logger.error(f"Error renovando token: {e}")

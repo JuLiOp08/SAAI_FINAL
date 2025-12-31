@@ -8,9 +8,9 @@ from utils import (
     log_request,
     extract_tenant_from_jwt_claims,
     query_by_tenant,
-    decimal_to_float,
-    paginate_results
+    decimal_to_float
 )
+from utils.pagination_utils import extract_pagination_params, create_next_token
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -19,28 +19,23 @@ GASTOS_TABLE = os.environ.get('GASTOS_TABLE')
 
 def handler(event, context):
     """
-    GET /gastos - Listar gastos paginado
+    GET /gastos - Listar gastos
     
     Según documento SAAI (ADMIN):
-    Query Params: limit, last_evaluated_key, categoria, fecha_inicio, fecha_fin
-    
     Response:
     {
         "success": true,
-        "data": [
-            {
-                "codigo_gasto": "G001",
-                "descripcion": "Pago proveedor",
-                "monto": 150.0,
-                "categoria": "proveedores",
-                "fecha": "2025-11-08"
-            }
-        ],
-        "pagination": {
-            "total": 1,
-            "limit": 50,
-            "last_evaluated_key": null
-        }
+        "data": {
+            "gastos": [
+                {
+                    "codigo_gasto": "G001",
+                    "descripcion": "Pago proveedor",
+                    "monto": 150.0,
+                    "fecha": "2025-11-08"
+                }
+            ]
+        },
+        "next_token": "..."
     }
     """
     try:
@@ -51,40 +46,26 @@ def handler(event, context):
         if not tenant_id:
             return error_response("Token inválido - no se encontró codigo_tienda", 401)
         
-        # Parse query parameters
-        query_params = event.get('queryStringParameters') or {}
+        # Extraer parámetros de paginación según documentación SAAI
+        pagination = extract_pagination_params(event, default_limit=50)
         
-        # Obtener todos los gastos activos
+        # Consultar gastos activos usando utils (filtra INACTIVOS automáticamente)
         gastos_response = query_by_tenant(
-            GASTOS_TABLE,
-            tenant_id,
-            filter_expression="attribute_exists(#data) AND #data.estado = :estado",
-            expression_attribute_names={"#data": "data"},
-            expression_attribute_values={":estado": "ACTIVO"}
+            table_name=GASTOS_TABLE,
+            tenant_id=tenant_id,
+            limit=pagination['limit'],
+            last_evaluated_key=pagination.get('exclusive_start_key')
         )
         
-        gastos = gastos_response.get('Items', [])
+        gastos = gastos_response.get('items', [])
         
-        # Aplicar filtros opcionales
-        categoria = query_params.get('categoria')
-        fecha_inicio = query_params.get('fecha_inicio')
-        fecha_fin = query_params.get('fecha_fin')
-        
-        filtered_gastos = []
-        for item in gastos:
-            gasto_data = item.get('data', {})
+        # Convertir a formato de respuesta SAAI oficial
+        gastos_formateados = []
+        for gasto_data in gastos:
+            # Remover keys internas agregadas por query_by_tenant
+            gasto_data.pop('_tenant_id', None)
+            gasto_data.pop('_entity_id', None)
             
-            # Filtro por categoría
-            if categoria and gasto_data.get('categoria', '').lower() != categoria.lower():
-                continue
-            
-            # Filtro por rango de fechas
-            if fecha_inicio and gasto_data.get('fecha', '') < fecha_inicio:
-                continue
-            if fecha_fin and gasto_data.get('fecha', '') > fecha_fin:
-                continue
-            
-            # Convertir Decimal a float para response
             gasto_response = {
                 'codigo_gasto': gasto_data.get('codigo_gasto'),
                 'descripcion': gasto_data.get('descripcion'),
@@ -93,23 +74,23 @@ def handler(event, context):
                 'fecha': gasto_data.get('fecha')
             }
             
-            filtered_gastos.append(gasto_response)
+            gastos_formateados.append(gasto_response)
         
-        # Ordenar por fecha descendente
-        filtered_gastos.sort(key=lambda x: x.get('fecha', ''), reverse=True)
+        # Preparar respuesta según formato oficial SAAI
+        response_data = {
+            "gastos": gastos_formateados
+        }
         
-        # Aplicar paginación
-        limit = int(query_params.get('limit', 50))
-        last_key = query_params.get('last_evaluated_key')
+        # Agregar next_token si hay más páginas
+        last_evaluated_key = gastos_response.get('last_evaluated_key')
+        if last_evaluated_key:
+            next_token = create_next_token(last_evaluated_key)
+            if next_token:
+                response_data['next_token'] = next_token
         
-        paginated_response = paginate_results(filtered_gastos, limit, last_key)
+        logger.info(f"Listados {len(gastos_formateados)} gastos para tienda {tenant_id}")
         
-        logger.info(f"Listados {len(paginated_response['data'])} gastos para tienda {tenant_id}")
-        
-        return success_response(
-            data=paginated_response['data'],
-            pagination=paginated_response['pagination']
-        )
+        return success_response(data=response_data)
         
     except Exception as e:
         logger.error(f"Error listando gastos: {str(e)}")

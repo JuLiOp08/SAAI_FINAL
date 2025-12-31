@@ -19,8 +19,8 @@ def success_response(data=None, mensaje="Operación exitosa", status_code=200):
         dict: Respuesta HTTP formatada
     """
     response_body = {
-        "exito": True,
-        "mensaje": mensaje
+        "success": True,
+        "message": mensaje
     }
     
     if data is not None:
@@ -55,12 +55,12 @@ def error_response(mensaje="Error interno del servidor", detalles=None, status_c
         dict: Respuesta HTTP de error formatada
     """
     response_body = {
-        "exito": False,
-        "error": mensaje
+        "success": False,
+        "message": mensaje
     }
     
     if detalles is not None:
-        response_body["detalles"] = detalles
+        response_body["data"] = detalles
     
     response = {
         "statusCode": status_code,

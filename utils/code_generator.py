@@ -11,10 +11,25 @@ def generar_codigo_tienda():
     Returns:
         str: Código de tienda generado
     """
-    # En producción, esto debería consultar la base de datos para obtener el siguiente número
-    # Por ahora, generamos uno aleatorio para desarrollo
-    numero = random.randint(1, 999)
-    return f"T{numero:03d}"
+    from .dynamodb_utils import increment_counter
+    import os
+    
+    try:
+        # Usar tabla de contadores SAAI para generar código secuencial
+        counters_table = os.environ.get('COUNTERS_TABLE')
+        if counters_table:
+            siguiente_numero = increment_counter(counters_table, 'SAAI', 'TIENDAS')
+            if siguiente_numero:
+                return f"T{siguiente_numero:03d}"
+        
+        # Fallback si no hay tabla configurada (desarrollo)
+        numero = random.randint(1, 999)
+        return f"T{numero:03d}"
+        
+    except Exception as e:
+        # Fallback en caso de error
+        numero = random.randint(1, 999)
+        return f"T{numero:03d}"
 
 def generar_codigo_usuario(codigo_tienda):
     """
@@ -26,9 +41,25 @@ def generar_codigo_usuario(codigo_tienda):
     Returns:
         str: Código de usuario generado
     """
-    # En producción, esto debería consultar la base de datos para obtener el siguiente número por tienda
-    numero = random.randint(1, 999)
-    return f"{codigo_tienda}U{numero:03d}"
+    from .dynamodb_utils import increment_counter
+    import os
+    
+    try:
+        # Usar tabla de contadores por tienda para código secuencial
+        counters_table = os.environ.get('COUNTERS_TABLE')
+        if counters_table:
+            siguiente_numero = increment_counter(counters_table, codigo_tienda, 'USUARIOS')
+            if siguiente_numero:
+                return f"{codigo_tienda}U{siguiente_numero:03d}"
+        
+        # Fallback si no hay tabla configurada
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}U{numero:03d}"
+        
+    except Exception as e:
+        # Fallback en caso de error
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}U{numero:03d}"
 
 def generar_codigo_producto(codigo_tienda):
     """
@@ -40,8 +71,23 @@ def generar_codigo_producto(codigo_tienda):
     Returns:
         str: Código de producto generado
     """
-    numero = random.randint(1, 999)
-    return f"{codigo_tienda}P{numero:03d}"
+    from .dynamodb_utils import increment_counter
+    import os
+    
+    try:
+        counters_table = os.environ.get('COUNTERS_TABLE')
+        if counters_table:
+            siguiente_numero = increment_counter(counters_table, codigo_tienda, 'PRODUCTOS')
+            if siguiente_numero:
+                return f"{codigo_tienda}P{siguiente_numero:03d}"
+        
+        # Fallback
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}P{numero:03d}"
+        
+    except Exception as e:
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}P{numero:03d}"
 
 def generar_codigo_venta(codigo_tienda):
     """
@@ -53,8 +99,23 @@ def generar_codigo_venta(codigo_tienda):
     Returns:
         str: Código de venta generado
     """
-    numero = random.randint(1, 999)
-    return f"{codigo_tienda}V{numero:03d}"
+    from .dynamodb_utils import increment_counter
+    import os
+    
+    try:
+        counters_table = os.environ.get('COUNTERS_TABLE')
+        if counters_table:
+            siguiente_numero = increment_counter(counters_table, codigo_tienda, 'VENTAS')
+            if siguiente_numero:
+                return f"{codigo_tienda}V{siguiente_numero:03d}"
+        
+        # Fallback
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}V{numero:03d}"
+        
+    except Exception as e:
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}V{numero:03d}"
 
 def generar_codigo_gasto(codigo_tienda):
     """
@@ -66,8 +127,23 @@ def generar_codigo_gasto(codigo_tienda):
     Returns:
         str: Código de gasto generado
     """
-    numero = random.randint(1, 999)
-    return f"{codigo_tienda}G{numero:03d}"
+    from .dynamodb_utils import increment_counter
+    import os
+    
+    try:
+        counters_table = os.environ.get('COUNTERS_TABLE')
+        if counters_table:
+            siguiente_numero = increment_counter(counters_table, codigo_tienda, 'GASTOS')
+            if siguiente_numero:
+                return f"{codigo_tienda}G{siguiente_numero:03d}"
+        
+        # Fallback
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}G{numero:03d}"
+        
+    except Exception as e:
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}G{numero:03d}"
 
 def generar_codigo_reporte(codigo_tienda, tipo_reporte):
     """

@@ -64,23 +64,22 @@ def handler(event, context):
         if not criterio or not valor:
             return validation_error_response("Criterio y valor son obligatorios")
         
-        # Obtener todos los gastos activos
+        # Obtener todos los gastos activos usando utils (filtra INACTIVOS automáticamente)
         gastos_response = query_by_tenant(
-            GASTOS_TABLE,
-            tenant_id,
-            filter_expression="attribute_exists(#data) AND #data.estado = :estado",
-            expression_attribute_names={"#data": "data"},
-            expression_attribute_values={":estado": "ACTIVO"}
+            table_name=GASTOS_TABLE,
+            tenant_id=tenant_id
         )
         
-        gastos = gastos_response.get('Items', [])
+        gastos = gastos_response.get('items', [])
         
         # Buscar por criterio
         valor_lower = str(valor).lower()
         found_gastos = []
         
-        for item in gastos:
-            gasto_data = item.get('data', {})
+        for gasto_data in gastos:
+            # Remover keys internas agregadas por query_by_tenant
+            gasto_data.pop('_tenant_id', None)
+            gasto_data.pop('_entity_id', None)
             
             match_found = False
             
@@ -96,6 +95,14 @@ def handler(event, context):
             elif criterio == 'fecha':
                 if str(gasto_data.get('fecha', '')) == str(valor):
                     match_found = True
+            elif criterio == 'fecha_rango':
+                # Búsqueda por rango de fechas
+                if isinstance(valor, dict) and 'desde' in valor and 'hasta' in valor:
+                    fecha_gasto = str(gasto_data.get('fecha', ''))
+                    fecha_desde = str(valor['desde'])
+                    fecha_hasta = str(valor['hasta'])
+                    if fecha_desde <= fecha_gasto <= fecha_hasta:
+                        match_found = True
             elif criterio == 'monto':
                 try:
                     monto_buscar = float(valor)

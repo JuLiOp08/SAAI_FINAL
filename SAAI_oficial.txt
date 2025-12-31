@@ -214,6 +214,22 @@ Request:
   }
 }
 
+EJEMPLO 4 – Buscar por nombre parcial:
+Request:
+{
+  "body": {
+    "query": "kola"
+  }
+}
+
+EJEMPLO 5 – Buscar por categoría específica:
+Request:
+{
+  "body": {
+    "categoria": "snacks"
+  }
+}
+
 Response:
 {
   "success": true,
@@ -376,38 +392,93 @@ Lambda: BuscarVenta
 Método: POST
 Path: /ventas/buscar
 
-EJEMPLO 1 – Buscar por código:
+EJEMPLO 1 – Buscar por código de venta:
 Request:
 {
   "body": {
-    "codigo_venta": "T002V015"
+    "criterio": "codigo_venta",
+    "valor": "T002V015"
   }
 }
 
-EJEMPLO 2 – Buscar por fecha:
+EJEMPLO 2 – Buscar por fecha específica:
 Request:
 {
   "body": {
-    "fecha": "2025-11-08"
+    "criterio": "fecha",
+    "valor": "2025-11-08"
+  }
+}
+
+EJEMPLO 3 – Buscar por nombre de cliente (parcial):
+Request:
+{
+  "body": {
+    "criterio": "cliente",
+    "valor": "Juan"
+  }
+}
+
+EJEMPLO 4 – Buscar por método de pago:
+Request:
+{
+  "body": {
+    "criterio": "metodo_pago",
+    "valor": "efectivo"
+  }
+}
+
+EJEMPLO 5 – Buscar por total exacto:
+Request:
+{
+  "body": {
+    "criterio": "total",
+    "valor": "148.09"
+  }
+}
+
+EJEMPLO 6 – Buscar por producto vendido (código o nombre):
+Request:
+{
+  "body": {
+    "criterio": "producto",
+    "valor": "coca"
+  }
+}
+
+EJEMPLO 7 – Buscar por rango de fechas:
+Request:
+{
+  "body": {
+    "criterio": "fecha_rango",
+    "valor": {
+      "desde": "2025-11-01",
+      "hasta": "2025-11-08"
+    }
   }
 }
 
 Response:
 {
   "success": true,
-  "data": {
-    "codigo_venta": "T002V015",
-    "total": 7.0,
-    "fecha": "2025-11-08T15:30:00-05:00",
-    "productos": [
-      {
-        "codigo_producto": "T002P001",
-        "nombre": "Coca Cola 500ml",
-        "cantidad": 2,
-        "precio_unitario": 3.5
-      }
-    ]
-  }
+  "data": [
+    {
+      "codigo_venta": "V001",
+      "cliente": "Juan Pérez",
+      "total": 148.09,
+      "fecha": "2025-11-08",
+      "metodo_pago": "efectivo",
+      "items": [
+        {
+          "codigo_producto": "P001",
+          "nombre_producto": "Producto 1",
+          "cantidad": 2,
+          "precio_unitario": 50.0,
+          "subtotal_item": 100.0
+        }
+      ]
+    }
+  ]
 }
 
 ------------------------------------
@@ -761,10 +832,35 @@ Lambda: BuscarUsuario
 Método: POST
 Path: /usuarios/buscar
 
+EJEMPLO 1 – Buscar por nombre (parcial):
 Request:
 {
   "body": {
     "query": "juan"
+  }
+}
+
+EJEMPLO 2 – Buscar por email (parcial):
+Request:
+{
+  "body": {
+    "query": "admin"
+  }
+}
+
+EJEMPLO 3 – Buscar por código de usuario:
+Request:
+{
+  "body": {
+    "query": "U002"
+  }
+}
+
+EJEMPLO 4 – Buscar por dominio de email:
+Request:
+{
+  "body": {
+    "query": "tienda.com"
   }
 }
 
@@ -887,26 +983,75 @@ Lambda: BuscarGasto
 Método: POST
 Path: /gastos/buscar
 
+EJEMPLO 1 – Buscar por descripción (parcial):
 Request:
 {
   "body": {
-    "categoria": "proveedores"
+    "criterio": "descripcion",
+    "valor": "Pago"
+  }
+}
+
+EJEMPLO 2 – Buscar por categoría exacta:
+Request:
+{
+  "body": {
+    "criterio": "categoria",
+    "valor": "proveedores"
+  }
+}
+
+EJEMPLO 3 – Buscar por código de gasto:
+Request:
+{
+  "body": {
+    "criterio": "codigo_gasto",
+    "valor": "G001"
+  }
+}
+
+EJEMPLO 4 – Buscar por fecha específica:
+Request:
+{
+  "body": {
+    "criterio": "fecha",
+    "valor": "2025-11-08"
+  }
+}
+
+EJEMPLO 5 – Buscar por monto exacto:
+Request:
+{
+  "body": {
+    "criterio": "monto",
+    "valor": "150.0"
+  }
+}
+
+EJEMPLO 6 – Buscar por rango de fechas:
+Request:
+{
+  "body": {
+    "criterio": "fecha_rango",
+    "valor": {
+      "desde": "2025-11-01",
+      "hasta": "2025-11-08"
+    }
   }
 }
 
 Response:
 {
   "success": true,
-  "data": {
-    "gastos": [
-      {
-        "codigo_gasto": "G001",
-        "descripcion": "Pago proveedor",
-        "monto": 150.0,
-        "fecha": "2025-11-08"
-      }
-    ]
-  }
+  "data": [
+    {
+      "codigo_gasto": "G001",
+      "descripcion": "Pago proveedor",
+      "monto": 150.0,
+      "categoria": "proveedores",
+      "fecha": "2025-11-08"
+    }
+  ]
 }
 
 ------------------------------------
@@ -1671,10 +1816,35 @@ Lambda: BuscarTienda
 Método: POST
 Path: /tiendas/buscar
 
+EJEMPLO 1 – Buscar por nombre de tienda (parcial):
 Request:
 {
   "body": {
     "query": "San Juan"
+  }
+}
+
+EJEMPLO 2 – Buscar por código de tienda:
+Request:
+{
+  "body": {
+    "query": "T002"
+  }
+}
+
+EJEMPLO 3 – Buscar por parte del nombre:
+Request:
+{
+  "body": {
+    "query": "bodega"
+  }
+}
+
+EJEMPLO 4 – Buscar por email de tienda:
+Request:
+{
+  "body": {
+    "query": "bodega@correo.com"
   }
 }
 

@@ -11,7 +11,7 @@ from utils import (
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
     put_item_standard,
-    increment_counter,
+    generar_codigo_gasto,
     obtener_fecha_hora_peru
 )
 
@@ -77,9 +77,8 @@ def handler(event, context):
         except (ValueError, TypeError):
             return validation_error_response("Monto debe ser un número válido")
         
-        # Generar código de gasto
-        contador = increment_counter(COUNTERS_TABLE, tenant_id, "GASTOS")
-        codigo_gasto = f"G{contador:03d}"
+        # Generar código de gasto usando utils
+        codigo_gasto = generar_codigo_gasto(tenant_id)
         
         # Crear entidad gasto
         fecha_actual = obtener_fecha_hora_peru()

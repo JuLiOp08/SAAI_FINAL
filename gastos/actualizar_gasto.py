@@ -11,7 +11,7 @@ from utils import (
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
     get_item_standard,
-    put_item_standard,
+    update_item_standard,
     obtener_fecha_hora_peru
 )
 
@@ -74,44 +74,46 @@ def handler(event, context):
             return validation_error_response("Request body requerido")
         
         # Validar campos (todos opcionales para actualización)
-        updated_data = existing_gasto.copy()
+        updates = {}
         
         if 'descripcion' in body:
             if not body['descripcion']:
                 return validation_error_response("Descripcion no puede estar vacía")
-            updated_data['descripcion'] = str(body['descripcion']).strip()
+            updates['descripcion'] = str(body['descripcion']).strip()
         
         if 'monto' in body:
             try:
                 monto = float(body['monto'])
                 if monto <= 0:
                     return validation_error_response("El monto debe ser mayor a 0")
-                updated_data['monto'] = Decimal(str(monto))
+                updates['monto'] = Decimal(str(monto))
             except (ValueError, TypeError):
                 return validation_error_response("Monto debe ser un número válido")
         
         if 'categoria' in body:
             if not body['categoria']:
                 return validation_error_response("Categoria no puede estar vacía")
-            updated_data['categoria'] = str(body['categoria']).strip()
+            updates['categoria'] = str(body['categoria']).strip()
         
         if 'fecha' in body:
             if not body['fecha']:
                 return validation_error_response("Fecha no puede estar vacía")
-            updated_data['fecha'] = str(body['fecha']).strip()
+            updates['fecha'] = str(body['fecha']).strip()
         
-        # Actualizar metadatos
-        updated_data['updated_at'] = obtener_fecha_hora_peru()
+        # Agregar metadatos de auditoría
         if codigo_usuario:
-            updated_data['updated_by'] = codigo_usuario
+            updates['updated_by'] = codigo_usuario
         
-        # Guardar cambios
-        put_item_standard(
-            GASTOS_TABLE,
+        # Actualizar usando utils
+        success = update_item_standard(
+            table_name=GASTOS_TABLE,
             tenant_id=tenant_id,
             entity_id=codigo_gasto,
-            data=updated_data
+            data_updates=updates
         )
+        
+        if not success:
+            return error_response("Error actualizando gasto", 500)
         
         logger.info(f"Gasto actualizado: {codigo_gasto} en tienda {tenant_id}")
         

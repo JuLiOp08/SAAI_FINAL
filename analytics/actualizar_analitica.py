@@ -4,29 +4,22 @@ import json
 import logging
 import boto3
 from datetime import datetime, timedelta, timezone
-from boto3.dynamodb.conditions import Key
-from decimal import Decimal
 from utils import (
     success_response,
     error_response,
-    log_request,
-    get_lima_datetime,
-    get_tenant_id_from_jwt,
-    get_codigo_usuario_from_jwt
+    parse_request_body,
+    extract_tenant_from_jwt_claims,
+    extract_user_from_jwt_claims,
+    obtener_fecha_hora_peru,
+    query_by_tenant,
+    put_item_standard,
+    get_item_standard
 )
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# DynamoDB
-dynamodb = boto3.resource('dynamodb')
-analitica_table = dynamodb.Table(os.environ['ANALITICA_TABLE'])
-ventas_table = dynamodb.Table(os.environ['VENTAS_TABLE'])
-productos_table = dynamodb.Table(os.environ['PRODUCTOS_TABLE'])
-usuarios_table = dynamodb.Table(os.environ['USUARIOS_TABLE'])
-gastos_table = dynamodb.Table(os.environ['GASTOS_TABLE'])
-
-# SNS y Lambda
+# Clientes AWS
 sns = boto3.client('sns')
 lambda_client = boto3.client('lambda')
 
@@ -37,31 +30,36 @@ def handler(event, context):
     POST /analitica
     
     Calcula y guarda métricas agregadas por tienda/fecha.
-    Emite alertas en SNS AlertasSAAI + WebSocket.
+    Emite alertas en SNS AlertasSAAI + notificación WebSocket mínima.
+    
+    NOTA: Este endpoint normalmente se ejecuta automáticamente cada 4 horas
+    mediante EventBridge, no por acción directa del usuario.
     
     Request: { "body": { "fecha": "2025-11-08" } }
     Response: { "success": true, "message": "Analítica actualizada" }
     """
     try:
-        log_request(event)
-        
         # JWT validation + tenant
-        tenant_id = get_tenant_id_from_jwt(event)
-        codigo_usuario = get_codigo_usuario_from_jwt(event)
+        tenant_id = extract_tenant_from_jwt_claims(event)
+        user_info = extract_user_from_jwt_claims(event)
+        codigo_usuario = user_info.get('codigo_usuario') if user_info else None
+        
+        if not tenant_id or not codigo_usuario:
+            return error_response("Token inválido - datos faltantes", 401)
         
         # Parse body
-        body = json.loads(event.get('body', '{}'))
+        body = parse_request_body(event)
         fecha_param = body.get('fecha')
         
         # Fecha de cálculo (default: hoy)
-        lima_now = get_lima_datetime()
+        lima_now = obtener_fecha_hora_peru()
         if fecha_param:
             try:
                 fecha_calc = datetime.strptime(fecha_param, '%Y-%m-%d').replace(tzinfo=timezone.utc)
             except ValueError:
                 return error_response("Formato de fecha inválido. Use YYYY-MM-DD", 400)
         else:
-            fecha_calc = lima_now
+            fecha_calc = datetime.now(timezone.utc)
         
         fecha_str = fecha_calc.strftime('%Y-%m-%d')
         
@@ -81,16 +79,20 @@ def handler(event, context):
         # 2. GASTOS del período
         gastos_periodo = calcular_gastos_periodo(tenant_id, fecha_inicio, fecha_fin)
         
-        # 3. INVENTARIO actual
+        # 3. Calcular BALANCE (ingresos - egresos)
+        balance = ventas_periodo['total_ingresos'] - gastos_periodo['total_egresos']
+        gastos_periodo['balance'] = round(balance, 2)
+        
+        # 4. INVENTARIO actual
         inventario_actual = calcular_inventario_actual(tenant_id)
         
-        # 4. USUARIOS de la tienda
+        # 5. USUARIOS de la tienda
         usuarios_tienda = calcular_usuarios_tienda(tenant_id)
         
-        # 5. PRODUCTOS TOP (más vendidos del período)
+        # 6. PRODUCTOS TOP (más vendidos del período)
         productos_top = calcular_productos_top(tenant_id, fecha_inicio, fecha_fin)
         
-        # 6. VENTAS DIARIAS del período
+        # 7. VENTAS DIARIAS del período
         ventas_diarias = calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin)
         
         # Construir resultado analítico
@@ -107,7 +109,7 @@ def handler(event, context):
             "productos_top": productos_top,
             "ventas_diarias": ventas_diarias,
             "alertas_detectadas": [],
-            "updated_at": lima_now.isoformat()
+            "updated_at": obtener_fecha_hora_peru()
         }
         
         # =================================================================
@@ -150,11 +152,16 @@ def handler(event, context):
         # =================================================================
         entity_id = f"{fecha_inicio.strftime('%Y-%m-%d')}_{fecha_fin.strftime('%Y-%m-%d')}"
         
-        analitica_table.put_item(Item={
-            'tenant_id': tenant_id,
-            'entity_id': entity_id,
-            'data': json.loads(json.dumps(analitica_data, default=decimal_default))
-        })
+        # Usar función estándar de utils
+        success = put_item_standard(
+            table_name=os.environ['ANALITICA_TABLE'],
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            data=analitica_data
+        )
+        
+        if not success:
+            return error_response("Error guardando analítica", 500)
         
         logger.info(f"✅ Analítica guardada: {entity_id}")
         
@@ -165,22 +172,33 @@ def handler(event, context):
             await_publiar_alertas_sns(tenant_id, alertas, codigo_usuario)
         
         # =================================================================
-        # EMITIR EVENTO WEBSOCKET
+        # EMITIR NOTIFICACIÓN WEBSOCKET (MÍNIMA)
         # =================================================================
         try:
+            # Payload mínimo: solo notifica que la analítica fue actualizada
+            # El frontend debe hacer refetch a GET /analitica para obtener los datos
+            event_payload = {
+                'tenant_id': tenant_id,
+                'event_type': 'analitica_actualizada',
+                'payload': {
+                    'periodo': {
+                        'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
+                        'fecha_fin': fecha_fin.strftime('%Y-%m-%d')
+                    },
+                    'timestamp': obtener_fecha_hora_peru(),
+                    'mensaje': 'Analítica actualizada. Refetch datos desde /analitica'
+                }
+            }
+            
             lambda_client.invoke(
-                FunctionName=f"{os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'saai-backend-dev')}-EmitirEventosWs",
-                InvocationType='Event',
-                Payload=json.dumps({
-                    'tenant_id': tenant_id,
-                    'evento_tipo': 'analitica_actualizada',
-                    'timestamp': lima_now.isoformat(),
-                    'data': {'fecha': fecha_str}
-                })
+                FunctionName=f"saai-{os.environ.get('STAGE', 'dev')}-EmitirEventosWs",
+                InvocationType='Event',  # Async
+                Payload=json.dumps(event_payload)
             )
-            logger.info(f"📡 WebSocket event emitido: analitica_actualizada")
+            
+            logger.info(f"🔔 Notificación WebSocket 'analitica_actualizada' enviada (payload mínimo)")
         except Exception as ws_error:
-            logger.error(f"Error emitiendo WebSocket: {str(ws_error)}")
+            logger.warning(f"Error enviando notificación WebSocket: {str(ws_error)}")
             # No fallar por WebSocket
         
         return success_response("Analítica actualizada")
@@ -194,28 +212,28 @@ def handler(event, context):
 # =================================================================
 
 def calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin):
-    """Calcula métricas de ventas para el período"""
+    """Calcula métricas de ventas para el período usando utils"""
     try:
-        # Query ventas del período
-        response = ventas_table.query(
-            IndexName='tenant-created-index',  # Asume GSI por fecha
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#fecha BETWEEN :inicio AND :fin AND #data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#fecha': 'fecha',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':inicio': fecha_inicio.strftime('%Y-%m-%d'),
-                ':fin': fecha_fin.strftime('%Y-%m-%d'),
-                ':estado': 'ACTIVO'
-            }
+        from boto3.dynamodb.conditions import Attr
+        
+        # Crear filtro para fechas
+        filter_expression = (
+            Attr('data.fecha').between(
+                fecha_inicio.strftime('%Y-%m-%d'), 
+                fecha_fin.strftime('%Y-%m-%d')
+            ) & Attr('data.estado').eq('ACTIVO')
         )
         
-        ventas = response.get('Items', [])
+        # Query usando utils
+        result = query_by_tenant(
+            table_name=os.environ['VENTAS_TABLE'],
+            tenant_id=tenant_id,
+            filter_expression=filter_expression
+        )
+        
+        ventas = result.get('items', [])
         total_ventas = len(ventas)
-        total_ingresos = sum(float(v['data'].get('total', 0)) for v in ventas)
+        total_ingresos = sum(float(v.get('total', 0)) for v in ventas)
         promedio_diario = total_ventas / 7.0 if total_ventas > 0 else 0
         
         return {
@@ -229,66 +247,59 @@ def calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin):
         return {"total_ventas": 0, "total_ingresos": 0.0, "promedio_diario": 0.0}
 
 def calcular_gastos_periodo(tenant_id, fecha_inicio, fecha_fin):
-    """Calcula métricas de gastos para el período"""
+    """Calcula métricas de gastos para el período usando utils"""
     try:
-        response = gastos_table.query(
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#fecha BETWEEN :inicio AND :fin AND #data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#fecha': 'fecha',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':inicio': fecha_inicio.strftime('%Y-%m-%d'),
-                ':fin': fecha_fin.strftime('%Y-%m-%d'),
-                ':estado': 'ACTIVO'
-            }
+        from boto3.dynamodb.conditions import Attr
+        
+        # Crear filtro para fechas
+        filter_expression = (
+            Attr('data.fecha').between(
+                fecha_inicio.strftime('%Y-%m-%d'), 
+                fecha_fin.strftime('%Y-%m-%d')
+            ) & Attr('data.estado').eq('ACTIVO')
         )
         
-        gastos = response.get('Items', [])
-        total_gastos = len(gastos)
-        total_egresos = sum(float(g['data'].get('monto', 0)) for g in gastos)
+        # Query usando utils
+        result = query_by_tenant(
+            table_name=os.environ['GASTOS_TABLE'],
+            tenant_id=tenant_id,
+            filter_expression=filter_expression
+        )
         
-        # Balance = ingresos - egresos (necesita ventas)
-        ventas_periodo = calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin)
-        balance = ventas_periodo['total_ingresos'] - total_egresos
+        gastos = result.get('items', [])
+        total_gastos = len(gastos)
+        total_egresos = sum(float(g.get('monto', 0)) for g in gastos)
         
         return {
             "total_gastos": total_gastos,
-            "total_egresos": round(total_egresos, 2),
-            "balance": round(balance, 2)
+            "total_egresos": round(total_egresos, 2)
         }
         
     except Exception as e:
         logger.error(f"Error calculando gastos período: {str(e)}")
-        return {"total_gastos": 0, "total_egresos": 0.0, "balance": 0.0}
+        return {"total_gastos": 0, "total_egresos": 0.0}
 
 def calcular_inventario_actual(tenant_id):
-    """Calcula métricas de inventario actual"""
+    """Calcula métricas de inventario actual usando utils"""
     try:
-        response = productos_table.query(
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':estado': 'ACTIVO'
-            }
+        from boto3.dynamodb.conditions import Attr
+        
+        # Query productos activos usando utils
+        result = query_by_tenant(
+            table_name=os.environ['PRODUCTOS_TABLE'],
+            tenant_id=tenant_id,
+            filter_expression=Attr('data.estado').eq('ACTIVO')
         )
         
-        productos = response.get('Items', [])
+        productos = result.get('items', [])
         total_productos = len(productos)
         productos_sin_stock = 0
         productos_bajo_stock = 0
         valor_total = 0
         
         for producto in productos:
-            data = producto['data']
-            stock = int(data.get('stock', 0))
-            precio = float(data.get('precio', 0))
+            stock = int(producto.get('stock', 0))
+            precio = float(producto.get('precio', 0))
             
             valor_total += stock * precio
             
@@ -309,26 +320,23 @@ def calcular_inventario_actual(tenant_id):
         return {"total_productos": 0, "productos_sin_stock": 0, "productos_bajo_stock": 0, "valor_total": 0.0}
 
 def calcular_usuarios_tienda(tenant_id):
-    """Calcula usuarios activos por rol"""
+    """Calcula usuarios activos por rol usando utils"""
     try:
-        response = usuarios_table.query(
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':estado': 'ACTIVO'
-            }
+        from boto3.dynamodb.conditions import Attr
+        
+        # Query usuarios activos usando utils
+        result = query_by_tenant(
+            table_name=os.environ['USUARIOS_TABLE'],
+            tenant_id=tenant_id,
+            filter_expression=Attr('data.estado').eq('ACTIVO')
         )
         
-        usuarios = response.get('Items', [])
+        usuarios = result.get('items', [])
         administradores = 0
         trabajadores = 0
         
         for usuario in usuarios:
-            role = usuario['data'].get('role', '')
+            role = usuario.get('role', '')
             if role == 'admin':
                 administradores += 1
             elif role == 'worker':
@@ -344,30 +352,30 @@ def calcular_usuarios_tienda(tenant_id):
         return {"administradores": 0, "trabajadores": 0}
 
 def calcular_productos_top(tenant_id, fecha_inicio, fecha_fin):
-    """Calcula productos más vendidos del período"""
+    """Calcula productos más vendidos del período usando utils"""
     try:
-        # Query ventas del período
-        response = ventas_table.query(
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#fecha BETWEEN :inicio AND :fin AND #data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#fecha': 'fecha',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':inicio': fecha_inicio.strftime('%Y-%m-%d'),
-                ':fin': fecha_fin.strftime('%Y-%m-%d'),
-                ':estado': 'ACTIVO'
-            }
+        from boto3.dynamodb.conditions import Attr
+        
+        # Query ventas del período usando utils
+        filter_expression = (
+            Attr('data.fecha').between(
+                fecha_inicio.strftime('%Y-%m-%d'), 
+                fecha_fin.strftime('%Y-%m-%d')
+            ) & Attr('data.estado').eq('ACTIVO')
         )
         
-        ventas = response.get('Items', [])
+        result = query_by_tenant(
+            table_name=os.environ['VENTAS_TABLE'],
+            tenant_id=tenant_id,
+            filter_expression=filter_expression
+        )
+        
+        ventas = result.get('items', [])
         productos_vendidos = {}
         
         # Contabilizar productos vendidos
         for venta in ventas:
-            productos = venta['data'].get('productos', [])
+            productos = venta.get('productos', [])
             for producto in productos:
                 codigo = producto.get('codigo_producto')
                 cantidad = int(producto.get('cantidad', 0))
@@ -393,31 +401,31 @@ def calcular_productos_top(tenant_id, fecha_inicio, fecha_fin):
         return []
 
 def calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin):
-    """Calcula ventas por día del período"""
+    """Calcula ventas por día del período usando utils"""
     try:
-        # Query ventas del período
-        response = ventas_table.query(
-            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
-            FilterExpression='#data.#fecha BETWEEN :inicio AND :fin AND #data.#estado = :estado',
-            ExpressionAttributeNames={
-                '#data': 'data',
-                '#fecha': 'fecha',
-                '#estado': 'estado'
-            },
-            ExpressionAttributeValues={
-                ':inicio': fecha_inicio.strftime('%Y-%m-%d'),
-                ':fin': fecha_fin.strftime('%Y-%m-%d'),
-                ':estado': 'ACTIVO'
-            }
+        from boto3.dynamodb.conditions import Attr
+        
+        # Query ventas del período usando utils
+        filter_expression = (
+            Attr('data.fecha').between(
+                fecha_inicio.strftime('%Y-%m-%d'), 
+                fecha_fin.strftime('%Y-%m-%d')
+            ) & Attr('data.estado').eq('ACTIVO')
         )
         
-        ventas = response.get('Items', [])
+        result = query_by_tenant(
+            table_name=os.environ['VENTAS_TABLE'],
+            tenant_id=tenant_id,
+            filter_expression=filter_expression
+        )
+        
+        ventas = result.get('items', [])
         ventas_por_dia = {}
         
         # Agrupar ventas por día
         for venta in ventas:
-            fecha_venta = venta['data'].get('fecha', '')[:10]  # YYYY-MM-DD
-            total = float(venta['data'].get('total', 0))
+            fecha_venta = venta.get('fecha', '')[:10]  # YYYY-MM-DD
+            total = float(venta.get('total', 0))
             
             if fecha_venta not in ventas_por_dia:
                 ventas_por_dia[fecha_venta] = {'cantidad': 0, 'ingresos': 0}
@@ -447,14 +455,16 @@ def calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin):
         return []
 
 def obtener_stock_producto(tenant_id, codigo_producto):
-    """Obtiene stock actual de un producto"""
+    """Obtiene stock actual de un producto usando utils"""
     try:
-        response = productos_table.get_item(
-            Key={'tenant_id': tenant_id, 'entity_id': codigo_producto}
+        producto_data = get_item_standard(
+            table_name=os.environ['PRODUCTOS_TABLE'],
+            tenant_id=tenant_id,
+            entity_id=codigo_producto
         )
         
-        if 'Item' in response:
-            return int(response['Item']['data'].get('stock', 0))
+        if producto_data:
+            return int(producto_data.get('stock', 0))
         return 0
         
     except Exception as e:
@@ -483,7 +493,7 @@ def await_publiar_alertas_sns(tenant_id, alertas, codigo_usuario):
                     'tipo': {'DataType': 'String', 'StringValue': alerta['tipo']},
                     'severidad': {'DataType': 'String', 'StringValue': alerta['severidad']},
                     'origen': {'DataType': 'String', 'StringValue': 'actualizarAnalitica'},
-                    'ts': {'DataType': 'String', 'StringValue': get_lima_datetime().isoformat()}
+                    'ts': {'DataType': 'String', 'StringValue': obtener_fecha_hora_peru()}
                 }
             )
             
@@ -491,9 +501,3 @@ def await_publiar_alertas_sns(tenant_id, alertas, codigo_usuario):
     
     except Exception as e:
         logger.error(f"Error publicando alertas SNS: {str(e)}")
-
-def decimal_default(obj):
-    """Serialización Decimal para JSON"""
-    if isinstance(obj, Decimal):
-        return float(obj)
-    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")

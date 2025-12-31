@@ -195,7 +195,7 @@ def delete_item_standard(table_name, tenant_id, entity_id, soft_delete=True):
         logger.error(f"Error inesperado eliminando item: {e}")
         return False
 
-def query_by_tenant(table_name, tenant_id, filter_expression=None, limit=None, last_evaluated_key=None):
+def query_by_tenant(table_name, tenant_id, filter_expression=None, limit=None, last_evaluated_key=None, include_inactive=False):
     """
     Consulta todos los items de un tenant con paginación
     
@@ -205,6 +205,7 @@ def query_by_tenant(table_name, tenant_id, filter_expression=None, limit=None, l
         filter_expression: Expresión de filtro opcional
         limit (int): Límite de items por página
         last_evaluated_key: Clave para paginación
+        include_inactive (bool): True para incluir registros INACTIVOS
         
     Returns:
         dict: {'items': [...], 'last_evaluated_key': ..., 'count': ...}
@@ -216,7 +217,17 @@ def query_by_tenant(table_name, tenant_id, filter_expression=None, limit=None, l
             'KeyConditionExpression': boto3.dynamodb.conditions.Key('tenant_id').eq(tenant_id)
         }
         
-        if filter_expression:
+        # Filtrar INACTIVOS por defecto según especificación SAAI
+        if not include_inactive:
+            from boto3.dynamodb.conditions import Attr
+            estado_filter = Attr('data.estado').ne('INACTIVO')
+            
+            if filter_expression:
+                combined_filter = filter_expression & estado_filter
+                query_params['FilterExpression'] = combined_filter
+            else:
+                query_params['FilterExpression'] = estado_filter
+        elif filter_expression:
             query_params['FilterExpression'] = filter_expression
         
         if limit:
@@ -255,7 +266,7 @@ def query_by_tenant(table_name, tenant_id, filter_expression=None, limit=None, l
         logger.error(f"Error inesperado consultando tabla: {e}")
         return {'items': [], 'count': 0, 'scanned_count': 0}
 
-def query_by_tenant_with_filter(table_name, tenant_id, filter_conditions, limit=None, last_evaluated_key=None):
+def query_by_tenant_with_filter(table_name, tenant_id, filter_conditions, limit=None, last_evaluated_key=None, include_inactive=False):
     """
     Consulta items de un tenant con filtros específicos en la data
     
@@ -265,6 +276,7 @@ def query_by_tenant_with_filter(table_name, tenant_id, filter_conditions, limit=
         filter_conditions (dict): Condiciones de filtro sobre campos de data
         limit (int): Límite de items
         last_evaluated_key: Clave para paginación
+        include_inactive (bool): True para incluir registros INACTIVOS
         
     Returns:
         dict: Resultado con items filtrados
@@ -305,7 +317,7 @@ def query_by_tenant_with_filter(table_name, tenant_id, filter_conditions, limit=
             for expr in filter_expressions[1:]:
                 combined_filter = combined_filter & expr
         
-        return query_by_tenant(table_name, tenant_id, combined_filter, limit, last_evaluated_key)
+        return query_by_tenant(table_name, tenant_id, combined_filter, limit, last_evaluated_key, include_inactive)
         
     except Exception as e:
         logger.error(f"Error construyendo filtros: {e}")
