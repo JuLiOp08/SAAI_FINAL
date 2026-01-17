@@ -50,7 +50,7 @@ def handler(event, context):
         
         # Validar que el usuario sea SAAI
         user_info = extract_user_from_jwt_claims(event)
-        if not user_info or user_info.get('rol') != 'saai':
+        if not user_info or user_info.get('rol', '').upper() != 'SAAI':
             return error_response("Solo usuarios SAAI pueden actualizar tiendas", 403)
         
         # Obtener código de tienda del path

@@ -343,10 +343,11 @@ def calcular_usuarios_tienda(tenant_id):
         trabajadores = 0
         
         for usuario in usuarios:
-            role = usuario.get('role', '')
-            if role == 'admin':
+            # El rol está dentro del campo 'rol', y puede ser 'ADMIN'/'TRABAJADOR' o 'admin'/'worker'
+            role = usuario.get('rol', usuario.get('role', '')).upper()
+            if role in ['ADMIN', 'ADMINISTRADOR']:
                 administradores += 1
-            elif role == 'worker':
+            elif role in ['TRABAJADOR', 'WORKER']:
                 trabajadores += 1
         
         return {
