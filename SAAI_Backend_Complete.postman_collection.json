@@ -8,7 +8,7 @@
 	"variable": [
 		{
 			"key": "base_url",
-			"value": "https://YOUR-API-GATEWAY-ID.execute-api.us-east-1.amazonaws.com/dev",
+			"value": "https://vv9y0ctfg4.execute-api.us-east-1.amazonaws.com/dev",
 			"type": "string"
 		},
 		{

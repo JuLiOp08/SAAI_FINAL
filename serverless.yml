@@ -559,7 +559,7 @@ functions:
       command:
         - prediccion_demanda.handler
     description: Predice demanda de productos usando Holt-Winters
-    timeout: 30
+    timeout: 29
     memorySize: 512
     environment:
       ALERTAS_SNS_TOPIC_ARN:
