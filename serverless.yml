@@ -1,8 +1,6 @@
 org: julio123
 service: saai-backend
 
-frameworkVersion: ^3.0.0
-
 provider:
   name: aws
   runtime: python3.9
