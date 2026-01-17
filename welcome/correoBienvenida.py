@@ -180,7 +180,7 @@ def handler(event, context):
                 # No fallar el lambda por error de placeholder
                 continue
         
-        return success_response(message="Correos de bienvenida procesados")
+        return success_response(mensaje="Correos de bienvenida procesados")
         
     except Exception as e:
         logger.error(f"Error procesando correos de bienvenida: {str(e)}")

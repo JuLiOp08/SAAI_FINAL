@@ -162,13 +162,13 @@ def handler(event, context):
         
         return success_response(
             data=response_data,
-            message="Login exitoso"
+            mensaje="Login exitoso"
         )
         
     except Exception as e:
         logger.error(f"Error inesperado en login: {e}")
         return error_response(
-            message="Error interno del servidor",
+            mensaje="Error interno del servidor",
             status_code=500
         )
 

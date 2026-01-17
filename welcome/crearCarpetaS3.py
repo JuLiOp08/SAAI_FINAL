@@ -155,7 +155,7 @@ Generado automáticamente por SAAI | {ts}
             
             logger.info(f"Estructura S3 creada exitosamente para tienda {tenant_id} ({nombre_tienda})")
         
-        return success_response(message="Estructura S3 creada")
+        return success_response(mensaje="Estructura S3 creada")
         
     except Exception as e:
         logger.error(f"Error creando estructura S3: {str(e)}")

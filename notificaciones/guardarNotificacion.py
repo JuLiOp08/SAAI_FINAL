@@ -114,7 +114,7 @@ def handler(event, context):
             
             logger.info(f"Notificación guardada: {codigo_notificacion} en tienda {tenant_id}, tipo: {tipo}, severidad: {severidad}")
         
-        return success_response(message="Notificaciones procesadas")
+        return success_response(mensaje="Notificaciones procesadas")
         
     except Exception as e:
         logger.error(f"Error guardando notificaciones: {str(e)}")
