@@ -344,19 +344,17 @@ def increment_counter(table_name, tenant_id, counter_name, increment=1):
                 'tenant_id': tenant_id,
                 'entity_id': counter_name
             },
-            UpdateExpression='SET #data.#value = if_not_exists(#data.#value, :zero) + :inc',
+            UpdateExpression='ADD #val :inc',
             ExpressionAttributeNames={
-                '#data': 'data',
-                '#value': 'value'
+                '#val': 'value'
             },
             ExpressionAttributeValues={
-                ':zero': 0,
                 ':inc': increment
             },
             ReturnValues='UPDATED_NEW'
         )
         
-        new_value = response['Attributes']['data']['value']
+        new_value = int(response['Attributes']['value'])
         logger.info(f"Counter incrementado: {counter_name} = {new_value}")
         return new_value
         

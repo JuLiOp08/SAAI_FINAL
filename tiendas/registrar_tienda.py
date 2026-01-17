@@ -166,12 +166,12 @@ def handler(event, context):
         logger.info(f"Tienda registrada: {codigo_tienda} con admin {codigo_usuario_admin}")
         
         return success_response(
-            message="Tienda registrada correctamente",
             data={
                 "codigo_tienda": codigo_tienda,
                 "codigo_usuario_admin": codigo_usuario_admin,
                 "estado": "ACTIVA"
-            }
+            },
+            mensaje="Tienda registrada correctamente"
         )
         
     except Exception as e:
