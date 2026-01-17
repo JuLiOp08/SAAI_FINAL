@@ -13,6 +13,14 @@ provider:
   iam:
     role: arn:aws:iam::361725523078:role/LabRole
   
+  # ECR Configuration para Docker Lambda (ML)
+  ecr:
+    images:
+      ml-image:
+        path: ./ml/
+        file: Dockerfile
+        platform: linux/amd64
+  
   environment:
     STAGE: ${self:provider.stage}
     REGION: ${self:provider.region}
@@ -571,6 +579,48 @@ functions:
             Ref: BienvenidaSaaiTopic
           topicName: BienvenidaSAAI-${self:provider.stage}
 
+  # =================================================================
+  # MACHINE LEARNING - PREDICCIÓN DEMANDA
+  # =================================================================
+  
+  EntrenarModelos:
+    image:
+      name: ml-image
+      command:
+        - entrenar_modelos.handler
+    description: Entrena modelos Holt-Winters para productos activos (cada 3 días)
+    timeout: 900  # 15 minutos
+    memorySize: 1024
+    environment:
+      ALERTAS_SNS_TOPIC_ARN:
+        Ref: AlertasSaaiTopic
+      EMITIR_EVENTOS_WS_FUNCTION_NAME: "${self:service}-${self:provider.stage}-EmitirEventosWs"
+    events:
+      - schedule:
+          name: ${self:service}-${self:provider.stage}-EntrenarModelosCada3Dias
+          description: Re-entrena modelos ML cada 3 días
+          rate: rate(3 days)
+          enabled: true
+
+  PrediccionDemanda:
+    image:
+      name: ml-image
+      command:
+        - prediccion_demanda.handler
+    description: Predice demanda de productos usando Holt-Winters
+    timeout: 30
+    memorySize: 512
+    environment:
+      ALERTAS_SNS_TOPIC_ARN:
+        Ref: AlertasSaaiTopic
+      EMITIR_EVENTOS_WS_FUNCTION_NAME: "${self:service}-${self:provider.stage}-EmitirEventosWs"
+    events:
+      - http:
+          path: /predicciones
+          method: post
+          cors: true
+          authorizer: authorizer
+
 resources:
   Resources:
     # =================================================================
@@ -788,6 +838,28 @@ resources:
       Type: AWS::DynamoDB::Table
       Properties:
         TableName: ${self:provider.environment.WS_CONNECTIONS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+          - AttributeName: entity_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+          - AttributeName: entity_id
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+
+    # =================================================================
+    # TABLA PREDICCIONES ML (CACHE)
+    # =================================================================
+    TPrediccionesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: t_predicciones
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: tenant_id

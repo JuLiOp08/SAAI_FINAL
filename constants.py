@@ -72,3 +72,22 @@ THRESHOLD_GANANCIA_BAJA = 50
 
 # Threshold para stock bajo de productos (unidades)
 THRESHOLD_STOCK_BAJO = 5
+
+# ============================================
+# MACHINE LEARNING - PREDICCIÓN DEMANDA
+# ============================================
+
+# Tipos de predicción
+TIPO_PREDICCION_DIARIA = 'DIARIA'
+TIPO_PREDICCION_SEMANAL = 'SEMANAL'
+
+# Tipos de alertas ML
+ALERTA_STOCK_BAJO_MANANA = 'stock_bajo_manana'
+ALERTA_STOCK_BAJO_SEMANA = 'stock_bajo_semana'
+ALERTA_ENTRENAMIENTO_ERROR = 'entrenamiento_errores'
+
+# Configuración modelos
+MIN_REGISTROS_ML = 30          # Mínimo de registros para entrenar
+DIAS_HISTORICO_ML = 90         # Días históricos para entrenamiento
+FORECAST_DIAS_ML = 7           # Días a predecir
+DIAS_ACTIVIDAD_MINIMA_ML = 30  # Días de actividad mínima para considerar producto activo

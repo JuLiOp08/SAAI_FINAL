@@ -1,0 +1,17 @@
+# Dependencias ML para SAAI
+# Python 3.10 compatible
+
+# AWS SDK
+boto3==1.34.22
+
+# Machine Learning - Holt-Winters
+statsmodels==0.14.1
+numpy==1.26.3
+pandas==2.2.0
+scipy==1.11.4
+
+# Serialización de modelos
+joblib==1.3.2
+
+# Timezone (para fechas Perú)
+pytz==2024.1
