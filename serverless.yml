@@ -3,7 +3,7 @@ service: saai-backend
 
 provider:
   name: aws
-  runtime: python3.9
+  runtime: 3.10.12
   region: us-east-1
   stage: ${opt:stage, 'dev'}
   
