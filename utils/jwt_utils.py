@@ -12,6 +12,7 @@ logger.setLevel(logging.INFO)
 # Configuración JWT
 JWT_SECRET = os.environ.get('JWT_SECRET', 'saai-secret-key-2025')
 JWT_ALGORITHM = 'HS256'
+JWT_AUDIENCE = os.environ.get('JWT_AUDIENCE', 'SAAI-Frontend')
 JWT_EXPIRES_IN = int(os.environ.get('JWT_EXPIRES_IN', 86400))  # 24 horas por defecto
 
 def generar_token_jwt(codigo_usuario, codigo_tienda, rol, datos_adicionales=None):
@@ -37,7 +38,7 @@ def generar_token_jwt(codigo_usuario, codigo_tienda, rol, datos_adicionales=None
             'iss': 'SAAI-Backend',  # Issuer
             'iat': int(ahora.timestamp()),  # Issued at
             'exp': int(expiracion.timestamp()),  # Expiration
-            'aud': 'SAAI-Frontend',  # Audience
+            'aud': JWT_AUDIENCE,  # Audience
             
             # Claims custom SAAI
             'codigo_usuario': codigo_usuario,
@@ -80,8 +81,13 @@ def verificar_token_jwt(token):
         if token.startswith('Bearer '):
             token = token[7:]
         
-        # Decodificar y verificar token
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        # Decodificar y verificar token (incluir audience esperado)
+        payload = jwt.decode(
+            token, 
+            JWT_SECRET, 
+            algorithms=[JWT_ALGORITHM],
+            audience=JWT_AUDIENCE
+        )
         
         # Validaciones adicionales
         if not payload.get('codigo_usuario'):
