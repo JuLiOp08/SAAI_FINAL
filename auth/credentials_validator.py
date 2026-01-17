@@ -115,6 +115,13 @@ def buscar_y_validar_credenciales_por_email(email, password):
     try:
         logger.info(f"Buscando usuario por email en todas las tiendas: {email}")
         
+        # CASO ESPECIAL: Usuario SAAI (super admin de la plataforma)
+        # El usuario SAAI no es una tienda, está en tenant_id="SAAI"
+        if email.lower() == 'saai@saai.com':
+            logger.info("Detectado login de usuario SAAI (super admin)")
+            return validar_credenciales_por_email('SAAI', email, password)
+        
+        # FLUJO NORMAL: Buscar en tiendas registradas
         # Primero obtener lista de todas las tiendas usando utils centralizadas
         from utils import query_by_tenant
         
@@ -217,8 +224,9 @@ def validar_credenciales_por_email(tenant_id, email, password):
             return None
         
         # Verificar que tenga rol válido
-        rol = usuario_data.get('rol')
-        if rol not in ['TRABAJADOR', 'ADMIN']:
+        # Permitir: TRABAJADOR, ADMIN, saai (super admin)
+        rol = usuario_data.get('rol') or usuario_data.get('role')  # Compatibilidad con ambos nombres
+        if rol not in ['TRABAJADOR', 'ADMIN', 'saai', 'worker', 'admin']:
             logger.error(f"Rol inválido para usuario: {email}, rol: {rol}")
             return None
         

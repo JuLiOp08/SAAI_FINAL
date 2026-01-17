@@ -239,7 +239,7 @@ def generar_token_recuperacion():
 
 def validar_formato_codigo_tienda(codigo):
     """
-    Valida si un código de tienda tiene el formato correcto T###
+    Valida si un código de tienda tiene el formato correcto T### o es SAAI (super admin)
     
     Args:
         codigo (str): Código a validar
@@ -247,6 +247,11 @@ def validar_formato_codigo_tienda(codigo):
     Returns:
         bool: True si es válido, False en caso contrario
     """
+    # Caso especial: SAAI (super admin de la plataforma)
+    if codigo == 'SAAI':
+        return True
+    
+    # Validación normal: T### (T001, T002, etc.)
     if not codigo or len(codigo) != 4:
         return False
     
