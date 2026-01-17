@@ -77,6 +77,19 @@ custom:
 
 functions:
   # =================================================================
+  # SETUP INICIAL (EJECUTAR SOLO UNA VEZ DESPUÉS DEL DEPLOY)
+  # =================================================================
+  SeedUsuarioSaai:
+    handler: setup/seed_usuario_saai.handler
+    description: Crea usuario SAAI inicial en DynamoDB (ejecutar 1 vez)
+    timeout: 10
+    events:
+      - http:
+          path: /setup/seed-usuario-saai
+          method: post
+          cors: true
+
+  # =================================================================
   # AUTHORIZER (CRITICO - TODAS LAS RUTAS PRIVADAS DEPENDEN DE ESTO)
   # =================================================================
   authorizer:

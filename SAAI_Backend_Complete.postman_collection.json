@@ -1,8 +1,8 @@
 {
 	"info": {
 		"_postman_id": "saai-backend-2025-complete",
-		"name": "SAAI Backend - API Completa (FASE 1+2+3)",
-		"description": "Colección completa de endpoints para el sistema SAAI (Sistema de Administración y Análisis Integral).\n\n**Incluye:**\n- 11 módulos completos (incluyendo Predicciones ML)\n- 37+ requests documentados\n- 3 roles: worker, admin, saai\n- Tests automáticos para guardar tokens\n- Variables de colección pre-configuradas\n\n**Orden de ejecución recomendado:**\n1. Login SAAI → guarda token_saai\n2. Registrar Tienda → guarda tenant_id y codigo_tienda\n3. Login Admin → guarda token_admin\n4. Login Worker → guarda token_worker\n5. Crear Producto → guarda codigo_producto\n6. Crear Ventas, Gastos, Predicciones ML, etc.\n\n**Variables requeridas:**\n- `base_url`: URL del API Gateway (configurar después del deploy)\n- `token_worker`, `token_admin`, `token_saai`: Se guardan automáticamente\n- `tenant_id`, `codigo_tienda`, `codigo_producto`: Se guardan automáticamente",
+		"name": "SAAI Backend - API Completa (FASE 1+2+3+SETUP)",
+		"description": "Colección completa de endpoints para el sistema SAAI (Sistema de Administración y Análisis Integral).\n\n**Incluye:**\n- 12 módulos completos (incluyendo SETUP + Predicciones ML)\n- 38+ requests documentados\n- 3 roles: worker, admin, saai\n- Tests automáticos para guardar tokens\n- Variables de colección pre-configuradas\n\n**⚠️ PRIMER USO (después del deploy):**\n1. `sls deploy` → crea bucket S3 automáticamente\n2. **SETUP** → Crear Usuario SAAI\n3. **AUTH** → Login SAAI\n\n**Orden de ejecución normal:**\n1. Login SAAI → guarda token_saai\n2. Registrar Tienda → guarda tenant_id y codigo_tienda\n3. Login Admin → guarda token_admin\n4. Login Worker → guarda token_worker\n5. Crear Producto → guarda codigo_producto\n6. Crear Ventas, Gastos, Predicciones ML, etc.\n\n**Variables requeridas:**\n- `base_url`: URL del API Gateway (configurar después del deploy)\n- `token_worker`, `token_admin`, `token_saai`: Se guardan automáticamente\n- `tenant_id`, `codigo_tienda`, `codigo_producto`: Se guardan automáticamente",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -58,6 +58,36 @@
 		}
 	],
 	"item": [
+		{
+			"name": "0. SETUP (EJECUTAR 1 VEZ)",
+			"item": [
+				{
+					"name": "Crear Usuario SAAI",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/setup/seed-usuario-saai",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"seed-usuario-saai"
+							]
+						},
+						"description": "⚠️ EJECUTAR SOLO UNA VEZ después del deploy.\nCrea el usuario SAAI inicial en DynamoDB con credenciales:\n- Email: saai@saai.com\n- Password: admin123\n\nEste usuario permite hacer Login SAAI y registrar tiendas.\n\nNOTA: El bucket S3 'saai-tiendas' se crea automáticamente con el deploy (serverless.yml)."
+					},
+					"response": []
+				}
+			],
+			"description": "⚠️ **SETUP INICIAL - EJECUTAR SOLO 1 VEZ**\n\nCrea el usuario administrador de la plataforma SAAI.\n\n**Orden de ejecución:**\n1. Deploy (sls deploy) → crea bucket S3 automáticamente\n2. Crear Usuario SAAI (este endpoint)\n3. Login SAAI → Registrar Tienda"
+		},
 		{
 			"name": "1. AUTH",
 			"item": [
