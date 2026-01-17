@@ -1,7 +1,7 @@
 org: julio123
 service: saai-backend
 
-frameworkVersion: '3'
+frameworkVersion: 3
 
 provider:
   name: aws
