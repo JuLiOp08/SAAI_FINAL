@@ -68,7 +68,7 @@ def handler(event, context):
                 'codigo_usuario': 'SAAI001',
                 'nombre': SAAI_USER['nombre'],
                 'email': SAAI_USER['email'],
-                'password_hash': password_hash,
+                'password': password_hash,
                 'role': 'saai',
                 'estado': 'ACTIVO',
                 'created_at': now,
