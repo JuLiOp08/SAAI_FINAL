@@ -65,8 +65,9 @@ def handler(event, context):
             logger.error(f"Claims obligatorios faltantes: user={codigo_usuario}, tenant={tenant_id}, rol={rol}")
             raise Exception('Unauthorized')
         
-        # Validar rol válido
-        if rol not in ['TRABAJADOR', 'ADMIN', 'SAAI']:
+        # Validar rol válido (aceptar mayúsculas y minúsculas)
+        roles_validos = ['TRABAJADOR', 'ADMIN', 'SAAI', 'worker', 'admin', 'saai']
+        if rol not in roles_validos:
             logger.error(f"Rol inválido en token: {rol}")
             raise Exception('Unauthorized')
         

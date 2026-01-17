@@ -78,16 +78,21 @@ def validar_credenciales_usuario(usuario, password):
             return None
         
         # Verificar que tenga rol válido
-        rol = usuario_data.get('rol')
-        if rol not in ['TRABAJADOR', 'ADMIN']:
+        rol = usuario_data.get('rol') or usuario_data.get('role')
+        if rol not in ['TRABAJADOR', 'ADMIN', 'worker', 'admin']:
             logger.error(f"Rol inválido para usuario: {usuario}, rol: {rol}")
             return None
+        
+        # Normalizar rol a mayúscula para consistencia
+        rol_normalizado = rol.upper() if rol in ['worker', 'admin'] else rol
+        if rol_normalizado == 'WORKER':
+            rol_normalizado = 'TRABAJADOR'
         
         # Retornar información del usuario validado
         return {
             'codigo_usuario': usuario,
             'tenant_id': tenant_id,
-            'rol': rol,
+            'rol': rol_normalizado,
             'nombre': usuario_data.get('nombre', ''),
             'email': usuario_data.get('email', ''),
             'estado': usuario_data.get('estado'),
@@ -226,9 +231,14 @@ def validar_credenciales_por_email(tenant_id, email, password):
         # Verificar que tenga rol válido
         # Permitir: TRABAJADOR, ADMIN, saai (super admin)
         rol = usuario_data.get('rol') or usuario_data.get('role')  # Compatibilidad con ambos nombres
-        if rol not in ['TRABAJADOR', 'ADMIN', 'saai', 'worker', 'admin']:
+        if rol not in ['TRABAJADOR', 'ADMIN', 'saai', 'worker', 'admin', 'SAAI']:
             logger.error(f"Rol inválido para usuario: {email}, rol: {rol}")
             return None
+        
+        # Normalizar rol a mayúscula para consistencia
+        rol_normalizado = rol.upper() if rol in ['saai', 'worker', 'admin'] else rol
+        if rol_normalizado == 'WORKER':
+            rol_normalizado = 'TRABAJADOR'
         
         # Extraer código_usuario de la entity_id
         codigo_usuario = usuario_data.get('codigo_usuario') or usuario_data.get('_entity_id')
@@ -237,7 +247,7 @@ def validar_credenciales_por_email(tenant_id, email, password):
         return {
             'codigo_usuario': codigo_usuario,
             'tenant_id': tenant_id,
-            'rol': rol,
+            'rol': rol_normalizado,
             'nombre': usuario_data.get('nombre', ''),
             'email': usuario_data.get('email', ''),
             'estado': usuario_data.get('estado'),

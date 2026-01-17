@@ -236,8 +236,11 @@ def obtener_tabla_tokens_por_rol(rol):
     """
     tablas_por_rol = {
         'TRABAJADOR': TOKENS_TRABAJADORES_TABLE,
+        'worker': TOKENS_TRABAJADORES_TABLE,  # Compatibilidad minúscula
         'ADMIN': TOKENS_ADMINISTRADORES_TABLE,
-        'SAAI': TOKENS_SAAI_TABLE
+        'admin': TOKENS_ADMINISTRADORES_TABLE,  # Compatibilidad minúscula
+        'SAAI': TOKENS_SAAI_TABLE,
+        'saai': TOKENS_SAAI_TABLE  # Compatibilidad minúscula
     }
     
     return tablas_por_rol.get(rol)
