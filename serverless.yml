@@ -396,20 +396,7 @@ functions:
           authorizer: authorizer
 
   # =================================================================
-  # ADMIN - PREDICCIÓN DEMANDA (ML)
-  # =================================================================
-  PrediccionDemanda:
-    handler: ml/prediccion_demanda.handler
-    description: Predicción de demanda con cache + SageMaker
-    timeout: 30
-    events:
-      - http:
-          path: /predicciones
-          method: post
-          cors: true
-          authorizer: authorizer
 
-  # =================================================================
   # SAAI - GESTIÓN DE TIENDAS
   # =================================================================
   RegistrarTienda:
@@ -493,20 +480,6 @@ functions:
   #     - sns:
   #         arn: arn:aws:sns:${self:provider.region}:${self:provider.environment.ACCOUNT_ID}:BienvenidaSAAI-${self:provider.stage}
 
-  CrearCarpetaS3:
-    handler: welcome/crear_carpeta_s3.handler
-    description: Consumidor SNS - crea carpeta S3 para nueva tienda
-    events:
-      - sns:
-          arn: arn:aws:sns:${self:provider.region}:${self:provider.environment.ACCOUNT_ID}:BienvenidaSAAI-${self:provider.stage}
-
-  SuscribirSnsAlerta:
-    handler: welcome/suscribir_sns_alerta.handler
-    description: Consumidor SNS - suscribe admin a alertas
-    events:
-      - sns:
-          arn: arn:aws:sns:${self:provider.region}:${self:provider.environment.ACCOUNT_ID}:BienvenidaSAAI-${self:provider.stage}
-
   # =================================================================
   # WEBSOCKET API (TIEMPO REAL)
   # =================================================================
@@ -527,23 +500,6 @@ functions:
   EmitirEventosWs:
     handler: websockets/emitir_eventos_ws.handler
     description: Emitir eventos WebSocket a conexiones de tienda
-
-  # =================================================================
-  # ML PIPELINE (EVENTBRIDGE)
-  # =================================================================
-  GenerarDataset:
-    handler: ml/generar_dataset.handler
-    description: Generar dataset para entrenamiento cada 3 días
-    timeout: 300
-    events:
-      - schedule:
-          rate: rate(3 days)
-          enabled: true
-
-  EntrenarModelo:
-    handler: ml/entrenar_modelo.handler
-    description: Entrenar modelo SageMaker con dataset generado
-    timeout: 900
 
   # =================================================================
   # FASE 5: SERVICIOS SNS Y NOTIFICACIONES
