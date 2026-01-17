@@ -102,7 +102,7 @@ def handler(event, context):
         logger.info(f"Usuario actualizado: {codigo_usuario} en tienda {tenant_id}")
         
         return success_response(
-            message="Usuario actualizado",
+            mensaje="Usuario actualizado",
             data={"codigo_usuario": codigo_usuario}
         )
         

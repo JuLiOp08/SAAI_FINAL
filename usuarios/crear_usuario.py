@@ -127,7 +127,7 @@ def handler(event, context):
         logger.info(f"Usuario creado: {codigo_usuario} en tienda {tenant_id}")
         
         return success_response(
-            message="Usuario creado",
+            mensaje="Usuario creado",
             data={"codigo_usuario": codigo_usuario}
         )
         

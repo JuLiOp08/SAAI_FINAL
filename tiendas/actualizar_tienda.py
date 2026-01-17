@@ -106,11 +106,11 @@ def handler(event, context):
         logger.info(f"Tienda actualizada: {codigo_tienda}")
         
         return success_response(
-            message="Tienda actualizada",
             data={
                 "codigo_tienda": codigo_tienda,
                 "estado": tienda_data.get('estado')
-            }
+            },
+            mensaje="Tienda actualizada"
         )
         
     except Exception as e:

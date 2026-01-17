@@ -95,7 +95,7 @@ def handler(event, context):
         logger.info(f"Producto eliminado (soft delete): {codigo_producto} en tienda {tenant_id}")
         
         return success_response(
-            message="Producto eliminado",
+            mensaje="Producto eliminado",
             data={"codigo_producto": codigo_producto}
         )
         

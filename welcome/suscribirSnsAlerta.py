@@ -118,7 +118,7 @@ def handler(event, context):
             logger.info(f"✅ Configuración SNS completada para tienda {tenant_id} ({nombre_tienda})")
         
         return success_response(
-            message="Suscripciones EMAIL SNS configuradas - Verificar email para confirmación"
+            mensaje="Suscripciones EMAIL SNS configuradas - Verificar email para confirmación"
         )
         
     except Exception as e:

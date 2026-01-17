@@ -120,7 +120,7 @@ def handler(event, context):
         logger.info(f"Producto creado: {codigo_producto} en tienda {tenant_id}")
         
         return success_response(
-            message="Producto creado",
+            mensaje="Producto creado",
             data={"codigo_producto": codigo_producto}
         )
         

@@ -283,7 +283,7 @@ def handler(event, context):
         logger.info(f"Venta registrada: {codigo_venta} en tienda {tenant_id}. Total: {decimal_to_float(total)}")
         
         return success_response(
-            message="Venta registrada",
+            mensaje="Venta registrada",
             data={
                 "codigo_venta": codigo_venta,
                 "total": decimal_to_float(total),

@@ -93,7 +93,7 @@ def handler(event, context):
         logger.info(f"Usuario eliminado (soft delete): {codigo_usuario} en tienda {tenant_id}")
         
         return success_response(
-            message="Usuario eliminado",
+            mensaje="Usuario eliminado",
             data={"codigo_usuario": codigo_usuario}
         )
         

@@ -90,8 +90,8 @@ def handler(event, context):
         logger.info(f"Tienda eliminada (soft delete): {codigo_tienda}")
         
         return success_response(
-            message="Tienda eliminada",
-            data={"codigo_tienda": codigo_tienda}
+            data={"codigo_tienda": codigo_tienda},
+            mensaje="Tienda eliminada"
         )
         
     except Exception as e:
