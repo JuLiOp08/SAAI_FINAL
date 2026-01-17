@@ -3,7 +3,7 @@ service: saai-backend
 
 provider:
   name: aws
-  runtime: 3.10.12
+  runtime: python3.10
   region: us-east-1
   stage: ${opt:stage, 'dev'}
   
@@ -15,8 +15,8 @@ provider:
   ecr:
     images:
       ml-image:
-        path: ./ml/
-        file: Dockerfile
+        path: ./
+        file: ml/Dockerfile
         platform: linux/amd64
   
   environment:
