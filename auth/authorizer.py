@@ -89,6 +89,11 @@ def handler(event, context):
         # Generar ARN del recurso
         method_arn = event['methodArn']
         
+        # Validar restricciones adicionales por rol (rutas permitidas/prohibidas)
+        if not validar_restricciones_adicionales(payload, method_arn):
+            logger.warning(f"Restricciones adicionales fallaron para rol={rol} en {method_arn}")
+            raise Exception('Unauthorized')
+        
         # Extraer información del ARN para policy
         arn_parts = method_arn.split(':')
         api_gateway_arn = ':'.join(arn_parts[:4]) + ':' + arn_parts[4]
