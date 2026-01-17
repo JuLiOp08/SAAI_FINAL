@@ -126,7 +126,10 @@ def obtener_tabla_tokens_por_rol(rol):
     tablas_por_rol = {
         'TRABAJADOR': TOKENS_TRABAJADORES_TABLE,
         'ADMIN': TOKENS_ADMINISTRADORES_TABLE,
-        'SAAI': TOKENS_SAAI_TABLE
+        'SAAI': TOKENS_SAAI_TABLE,
+        'worker': TOKENS_TRABAJADORES_TABLE,
+        'admin': TOKENS_ADMINISTRADORES_TABLE,
+        'saai': TOKENS_SAAI_TABLE
     }
     
     return tablas_por_rol.get(rol)
@@ -177,12 +180,15 @@ def validar_restricciones_adicionales(payload, method_arn):
     try:
         rol = payload.get('rol')
         
+        # Normalizar rol a mayúsculas para comparación
+        rol_upper = rol.upper() if rol else ''
+        
         # Extraer path del ARN
         arn_parts = method_arn.split('/')
         path = '/' + '/'.join(arn_parts[3:]) if len(arn_parts) > 3 else ''
         
         # Restricciones por rol
-        if rol == 'TRABAJADOR':
+        if rol_upper == 'TRABAJADOR':
             # TRABAJADOR solo puede acceder a productos y ventas (rutas restringidas desde env var)
             restricted_paths_str = os.environ.get('RESTRICTED_PATHS_WORKER', '/gastos,/analytics,/reportes')
             restricted_paths = [p.strip() for p in restricted_paths_str.split(',') if p.strip()]
@@ -192,14 +198,14 @@ def validar_restricciones_adicionales(payload, method_arn):
                 logger.warning(f"TRABAJADOR intenta acceder a ruta restringida: {path}")
                 return False
         
-        elif rol == 'ADMIN':
+        elif rol_upper == 'ADMIN':
             # ADMIN puede acceder a todo excepto gestión de tiendas
             rutas_prohibidas = ['/tiendas']
             if any(path.startswith(ruta) for ruta in rutas_prohibidas):
                 logger.warning(f"ADMIN intenta acceder a ruta prohibida: {path}")
                 return False
         
-        elif rol == 'SAAI':
+        elif rol_upper == 'SAAI':
             # SAAI solo puede gestionar tiendas y ver notificaciones
             rutas_permitidas = ['/tiendas', '/notificacion']
             if not any(path.startswith(ruta) for ruta in rutas_permitidas):
