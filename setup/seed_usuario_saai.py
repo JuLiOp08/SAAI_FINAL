@@ -13,7 +13,8 @@ from datetime import datetime
 
 # Clientes AWS
 dynamodb = boto3.resource('dynamodb')
-table_usuarios = dynamodb.Table('t_usuarios')
+USUARIOS_TABLE = os.environ.get('USUARIOS_TABLE')
+table_usuarios = dynamodb.Table(USUARIOS_TABLE)
 
 # Credenciales oficiales del usuario SAAI (según SAAI_oficial.txt)
 SAAI_USER = {
