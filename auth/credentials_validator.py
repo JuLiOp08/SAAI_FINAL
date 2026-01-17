@@ -338,8 +338,8 @@ def hashear_password(password):
         str: Password hasheado
     """
     try:
-        # Salt fijo para simplicidad (en producción usar salt aleatorio por usuario)
-        salt = "SAAI_SALT_2025"
+        # Usar JWT_SECRET como salt (consistente con seed_usuario_saai.py)
+        salt = os.environ.get('JWT_SECRET', 'saai-secret-key-2025')
         password_con_salt = password + salt
         
         # Hash SHA-256

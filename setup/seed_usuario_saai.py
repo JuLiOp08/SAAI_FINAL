@@ -7,8 +7,9 @@ EJECUTAR SOLO UNA VEZ (después del deploy inicial)
 
 import boto3
 import json
+import hashlib
+import os
 from datetime import datetime
-import bcrypt
 
 # Clientes AWS
 dynamodb = boto3.resource('dynamodb')
@@ -20,6 +21,15 @@ SAAI_USER = {
     'password': 'admin123',  # Plain text (se hasheará)
     'nombre': 'SAAI Admin'
 }
+
+
+def hash_password(password):
+    """
+    Hash de password usando SHA-256
+    Usa una salt fija para consistencia (setup inicial, no producción crítica)
+    """
+    salt = os.environ.get('JWT_SECRET', 'saai-secret-key-2025')
+    return hashlib.sha256(f"{password}{salt}".encode('utf-8')).hexdigest()
 
 
 def handler(event, context):
@@ -38,9 +48,9 @@ def handler(event, context):
     }
     """
     try:
-        # 1. Hash de la password con bcrypt (salt 10 rounds)
+        # 1. Hash de la password con SHA-256
         password_plain = SAAI_USER['password']
-        password_hash = bcrypt.hashpw(password_plain.encode('utf-8'), bcrypt.gensalt(rounds=10)).decode('utf-8')
+        password_hash = hash_password(password_plain)
         
         # 2. Timestamp actual (America/Lima)
         now = datetime.utcnow().isoformat() + '-05:00'
