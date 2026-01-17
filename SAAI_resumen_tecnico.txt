@@ -65,19 +65,25 @@ Machine Learning (Predicción Demanda)
 Arquitectura: Docker Lambda Container con statsmodels (Holt-Winters Triple Exponential Smoothing)
 
 EntrenarModelos (EventBridge cada 3 días):
-- Entrena modelos individuales por producto (.pkl)
+- Entrena modelos individuales por producto activo (.pkl)
+- Filtro selectivo: productos con ventas en últimos 30 días (evita timeout)
 - Guarda en S3: saai-tiendas/{tenant_id}/modelos/{codigo_producto}.pkl
-- Features dinámicas: dia_semana, es_fin_semana, es_feriado (holidays lib)
+- Features: SOLO fecha + cantidad (sin feriados, auto-detecta estacionalidad)
 - Tiempo entrenamiento: 1-2 segundos/modelo
 - Tamaño: ~3 KB/modelo
+- Timeout: 900s (15 min) para ~300 modelos activos
+- Emite evento WebSocket 'modelos_actualizados'
 
 PrediccionDemanda (POST /predicciones):
 1. Verifica cache en t_predicciones (TTL 24h)
-2. Si no existe → carga modelo desde S3
+2. Si no existe → carga modelo desde S3 (o entrena on-demand)
 3. Ejecuta forecast Holt-Winters (7 días)
-4. Guarda resultado en cache
-5. Publica alertas SNS (si stock < demanda)
+4. Guarda resultado en cache con TTL automático
+5. Publica alertas SNS: 'stockBajoManana' (CRITICAL) o 'stockBajoProximaSemana' (WARNING)
 6. Emite evento WebSocket 'prediccion_generada'
+7. Response: {codigo_producto, demanda_manana, demanda_proxima_semana}
 
-Costo: ~$0.50/mes para 10 tiendas (1000 modelos)
+Escalabilidad: Entrenamiento selectivo + fallback on-demand
+Costo: ~$0.13/mes para 10 tiendas (300 modelos activos)
 Precisión: 80-90% para retail
+Python: 3.10 (compatible EC2 Python 3.10.12)

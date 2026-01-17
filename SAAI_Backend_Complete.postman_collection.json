@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "saai-backend-2025-complete",
 		"name": "SAAI Backend - API Completa (FASE 1+2+3)",
-		"description": "Colección completa de endpoints para el sistema SAAI (Sistema de Administración y Análisis Integral).\n\n**Incluye:**\n- 10 módulos completos\n- 36 requests documentados\n- 3 roles: worker, admin, saai\n- Tests automáticos para guardar tokens\n- Variables de colección pre-configuradas\n\n**Orden de ejecución recomendado:**\n1. Login SAAI → guarda token_saai\n2. Registrar Tienda → guarda tenant_id y codigo_tienda\n3. Login Admin → guarda token_admin\n4. Login Worker → guarda token_worker\n5. Crear Producto, Ventas, Gastos, etc.\n\n**Variables requeridas:**\n- `base_url`: URL del API Gateway (configurar después del deploy)\n- `token_worker`, `token_admin`, `token_saai`: Se guardan automáticamente\n- `tenant_id`, `codigo_tienda`: Se guardan al registrar/login",
+		"description": "Colección completa de endpoints para el sistema SAAI (Sistema de Administración y Análisis Integral).\n\n**Incluye:**\n- 11 módulos completos (incluyendo Predicciones ML)\n- 37+ requests documentados\n- 3 roles: worker, admin, saai\n- Tests automáticos para guardar tokens\n- Variables de colección pre-configuradas\n\n**Orden de ejecución recomendado:**\n1. Login SAAI → guarda token_saai\n2. Registrar Tienda → guarda tenant_id y codigo_tienda\n3. Login Admin → guarda token_admin\n4. Login Worker → guarda token_worker\n5. Crear Producto → guarda codigo_producto\n6. Crear Ventas, Gastos, Predicciones ML, etc.\n\n**Variables requeridas:**\n- `base_url`: URL del API Gateway (configurar después del deploy)\n- `token_worker`, `token_admin`, `token_saai`: Se guardan automáticamente\n- `tenant_id`, `codigo_tienda`, `codigo_producto`: Se guardan automáticamente",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -1094,7 +1094,44 @@
 			"description": "Generación de reportes Excel. Sube a S3, guarda metadatos en DynamoDB. Solo rol admin."
 		},
 		{
-			"name": "8. NOTIFICACIONES",
+			"name": "8. PREDICCIONES ML",
+			"item": [
+				{
+					"name": "Predecir Demanda",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token_admin}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"codigo_producto\": \"{{codigo_producto}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/predicciones",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"predicciones"
+							]
+						},
+						"description": "Predice demanda de un producto usando Holt-Winters. Retorna demanda_manana y demanda_proxima_semana (7 días). Solo rol admin."
+					},
+					"response": []
+				}
+			],
+			"description": "Predicción de demanda con Machine Learning (Holt-Winters Triple Exponential Smoothing). Docker Lambda + statsmodels. Solo rol admin."
+		},
+		{
+			"name": "9. NOTIFICACIONES",
 			"item": [
 				{
 					"name": "Listar Notificaciones",
@@ -1134,7 +1171,7 @@
 			"description": "Notificaciones push generadas por alertas SNS. Solo rol admin."
 		},
 		{
-			"name": "9. TIENDAS (SAAI)",
+			"name": "10. TIENDAS (SAAI)",
 			"item": [
 				{
 					"name": "Registrar Tienda",

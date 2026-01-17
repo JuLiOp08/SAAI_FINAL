@@ -81,10 +81,10 @@ THRESHOLD_STOCK_BAJO = 5
 TIPO_PREDICCION_DIARIA = 'DIARIA'
 TIPO_PREDICCION_SEMANAL = 'SEMANAL'
 
-# Tipos de alertas ML
-ALERTA_STOCK_BAJO_MANANA = 'stock_bajo_manana'
-ALERTA_STOCK_BAJO_SEMANA = 'stock_bajo_semana'
-ALERTA_ENTRENAMIENTO_ERROR = 'entrenamiento_errores'
+# Tipos de alerta ML (oficial SAAI_oficial.txt)
+ALERTA_STOCK_BAJO_MANANA = 'stockBajoManana'
+ALERTA_STOCK_BAJO_SEMANA = 'stockBajoProximaSemana'
+ALERTA_ENTRENAMIENTO_ERROR = 'entrenamientoErrores'
 
 # Configuración modelos
 MIN_REGISTROS_ML = 30          # Mínimo de registros para entrenar

@@ -63,14 +63,11 @@ def handler(event, context):
             "codigo_producto": "T001P005"
         }
     
-    Response:
+    Response (oficial SAAI_oficial.txt):
         {
             "codigo_producto": "T001P005",
             "demanda_manana": 15,
-            "demanda_proxima_semana": 95,
-            "stock_actual": 20,
-            "fecha_prediccion": "2026-01-16T10:30:00",
-            "desde_cache": false
+            "demanda_proxima_semana": 95
         }
     """
     try:
@@ -152,16 +149,13 @@ def handler(event, context):
             'timestamp': datetime.now().isoformat()
         })
         
-        # 10. Retornar respuesta
+        # 10. Retornar respuesta (oficial SAAI_oficial.txt)
         return success_response(
             mensaje='Predicción generada exitosamente',
             data={
                 'codigo_producto': codigo_producto,
-                'demanda_manana': demanda_manana,
-                'demanda_proxima_semana': demanda_proxima_semana,
-                'stock_actual': stock_actual,
-                'fecha_prediccion': prediccion_data['fecha_prediccion'],
-                'desde_cache': False
+                'demanda_manana': int(demanda_manana),
+                'demanda_proxima_semana': int(demanda_proxima_semana)
             }
         )
     
@@ -190,14 +184,12 @@ def verificar_cache(tenant_id, codigo_producto):
     
     cache = get_item_standard('t_predicciones', tenant_id, cache_key)
     
+    # Retornar solo campos oficiales (SAAI_oficial.txt)
     if cache and cache.get('estado') == 'ACTIVO':
         return {
             'codigo_producto': cache.get('codigo_producto'),
             'demanda_manana': int(cache.get('demanda_manana', 0)),
-            'demanda_proxima_semana': int(cache.get('demanda_proxima_semana', 0)),
-            'stock_actual': int(cache.get('stock_actual', 0)),
-            'fecha_prediccion': cache.get('fecha_prediccion'),
-            'desde_cache': True
+            'demanda_proxima_semana': int(cache.get('demanda_proxima_semana', 0))
         }
     
     return None
