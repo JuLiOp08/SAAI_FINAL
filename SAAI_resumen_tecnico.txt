@@ -1,6 +1,6 @@
 1) SAAI – Resumen Técnico
 
-SAAI (Smart Assistant for Inventory) es una plataforma serverless en AWS para operación de tiendas (multi-tenant), con 3 frontends (Admin, Trabajador, SAAI) y un backend basado en API Gateway + Lambdas + DynamoDB, con alertas SNS, reportes en S3, predicción de demanda con SageMaker y actualizaciones en tiempo real vía WebSockets (solo notifica, el frontend refetch).
+SAAI (Smart Assistant for Inventory) es una plataforma serverless en AWS para operación de tiendas (multi-tenant), con 3 frontends (Admin, Trabajador, SAAI) y un backend basado en API Gateway + Lambdas + DynamoDB, con alertas SNS, reportes en S3, predicción de demanda con Docker Lambda (Holt-Winters + statsmodels) y actualizaciones en tiempo real vía WebSockets (solo notifica, el frontend refetch).
 
 Componentes principales
 
@@ -62,8 +62,22 @@ ListarHistorialReportes devuelve historial y genera presigned_url fresco en cada
 
 Machine Learning (Predicción Demanda)
 
-PrediccionDemanda primero consulta t_predicciones por (tenant_id, producto, fecha Perú).
+Arquitectura: Docker Lambda Container con statsmodels (Holt-Winters Triple Exponential Smoothing)
 
-Si existe → retorna; si no → invoca SageMaker Endpoint, guarda y retorna.
+EntrenarModelos (EventBridge cada 3 días):
+- Entrena modelos individuales por producto (.pkl)
+- Guarda en S3: saai-tiendas/{tenant_id}/modelos/{codigo_producto}.pkl
+- Features dinámicas: dia_semana, es_fin_semana, es_feriado (holidays lib)
+- Tiempo entrenamiento: 1-2 segundos/modelo
+- Tamaño: ~3 KB/modelo
 
-Puede publicar alertas (si stock < demanda) + emitir evento WebSocket.
+PrediccionDemanda (POST /predicciones):
+1. Verifica cache en t_predicciones (TTL 24h)
+2. Si no existe → carga modelo desde S3
+3. Ejecuta forecast Holt-Winters (7 días)
+4. Guarda resultado en cache
+5. Publica alertas SNS (si stock < demanda)
+6. Emite evento WebSocket 'prediccion_generada'
+
+Costo: ~$0.50/mes para 10 tiendas (1000 modelos)
+Precisión: 80-90% para retail

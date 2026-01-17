@@ -713,7 +713,7 @@ NOTAS GENERALES
 - UUID: uso interno (DynamoDB, relaciones)
 - Códigos: uso frontend (busquedas, UX)
 - Reportes: bajo demanda (NO automáticos)
-- SageMaker: solo predicción de demanda
+- ML (Predicción): Docker Lambda con Holt-Winters (statsmodels)
 - SNS: usado en Analítica (AlertasSAAI)
 
 FORMATO GENERAL
@@ -1485,7 +1485,23 @@ Servicios:
 - SNS: publica eventos en AlertasSAAI (totalventas_0, productoTopSinStock
 , totalVentas_0, gananciaDiaBaja)
   que luego terminan en GuardarNotificacion.
-- No escribe directamente en t_notificaciones (lo hace GuardarNotificacion).
+- No escribe directamente en t_notificaciones (lo hace GuardarNotificacion)
+
+Algoritmo:
+- Holt-Winters (statsmodels ExponentialSmoothing)
+- Entrenamiento: 1-2 segundos por modelo
+- Tamaño modelo: ~3 KB por producto (.pkl serializado)
+- Precisión: 80-90% para predicción retail
+
+Flujo:
+1. Verifica cache en t_predicciones (fecha Perú actual)
+2. Si existe cache válido → retorna predicción
+3. Si no existe → carga modelo desde S3 (o entrena si no existe)
+4. Ejecuta predicción con Holt-Winters (forecast 7 días)
+5. Guarda resultado en t_predicciones con TTL 24h
+6. Compara stock vs demanda → publica alertas SNS si es necesario
+7. Emite evento WebSocket 'prediccion_generada'
+8. Retorna predicción al cliente.
 - Invoca EmitirEventosWs con evento analitica_actualizada
 --------------------
 
@@ -1615,57 +1631,90 @@ Servicios:
 PREDICCIONES (ML) – DEMANDA
 ====================================
 
-Lambda: PrediccionDemanda
+Lambda: PrediccionDemanda (Docker Lambda Container)
 Ruta: POST /predicciones
 
 Descripción:
-Obtiene la predicción de demanda del producto (mínimo: para mañana; adicional: suma próxima semana (Calcula los prox 7 dias y lo suma)).
-Guarda el resultado para evitar recalcular en exceso y permitir historial.
+Obtiene la predicción de demanda del producto usando Holt-Winters (Triple Exponential Smoothing).
+Calcula demanda para mañana y suma de próximos 7 días.
+Guarda el resultado en t_predicciones para evitar recalcular en exceso y permitir historial.
 
 Tablas:
-- t_predicciones (historial de predicciones por tienda y producto)
+- t_predicciones (cache y historial de predicciones por tienda y producto, TTL 24h)
 - (lectura) t_productos (stock actual para comparar y activar alertas)
+- (lectura) t_ventas (datos históricos para entrenar modelo)
 
 Servicios:
-- SageMaker Endpoint (InvokeEndpoint)
-- SNS: publica en AlertasSAAI si detecta “stockactual < demanda_manana” o “stockactual < demanda_proxima_semana”
+- Lambda Container (Docker): Imagen con statsmodels para Holt-Winters
+- S3: Modelos entrenados en saai-tiendas/{tenant_id}/modelos/{codigo_producto}.pkl
+- SNS: publica en AlertasSAAI si detecta “stock_actual < demanda_manana” o “stock_actual < demanda_proxima_semana”
 - No escribe directamente en t_notificaciones (lo hace GuardarNotificacion)
+
+Algoritmo:
+- Holt-Winters (statsmodels ExponentialSmoothing)
+- Entrenamiento: 1-2 segundos por modelo
+- Tamaño modelo: ~3 KB por producto (.pkl serializado)
+- Precisión: 80-90% para predicción retail
+
+Flujo:
+1. Verifica cache en t_predicciones (fecha Perú actual)
+2. Si existe cache válido → retorna predicción
+3. Si no existe → carga modelo desde S3 (o entrena si no existe)
+4. Ejecuta predicción con Holt-Winters (forecast 7 días)
+5. Guarda resultado en t_predicciones con TTL 24h
+6. Compara stock vs demanda → publica alertas SNS si es necesario
+7. Emite evento WebSocket 'prediccion_generada'
+8. Retorna predicción al cliente
 
 
 ====================================
 PIPELINE ENTRENAMIENTO (AUTOMÁTICO CADA 3 DÍAS)
 ====================================
 
-Lambda: GeneraDataset
-Ruta: Interna (EventBridge Scheduler)
+Lambda: EntrenarModelos (Docker Lambda Container)
+Ruta: Interna (EventBridge Scheduler cada 3 días)
 
 Descripción:
-Construye el dataset para entrenamiento (por tienda o global, según tu diseño) y lo sube a S3.
+Entrena modelos Holt-Winters para todos los productos activos de todas las tiendas.
+Cada producto genera un modelo individual (.pkl) que se guarda en S3.
+Usa datos históricos de ventas para ajustar parámetros (alpha, beta, gamma).
 
 Tablas:
-- (lectura) t_ventas
-- (lectura) t_productos
-- (lectura) t_gastos (si lo usas como feature)
-- (opcional) t_analitica (features agregadas)
+- (lectura) t_tiendas (lista de tiendas activas para procesar)
+- (lectura) t_productos (productos activos por tienda)
+- (lectura) t_ventas (historial de ventas para entrenamiento)
 
 Servicios:
-- EventBridge (regla “cada 3 días”)
-- S3: saai-tiendas/codigo-reporte-SAAI/ml-dataset
+- EventBridge: Regla programada "rate(3 days)" para re-entrenamiento automático
+- Lambda Container (Docker): Imagen con statsmodels para Holt-Winters
+- S3: Guarda modelos en saai-tiendas/{tenant_id}/modelos/{codigo_producto}.pkl
+- SNS: publica en AlertasSAAI si hay errores en entrenamiento (producto sin ventas, etc.)
+- WebSocket: emite evento 'modelos_actualizados' al completar entrenamiento
 
+Proceso de entrenamiento:
+1. Itera por cada tienda activa
+2. Para cada producto activo en la tienda:
+   a. Consulta historial de ventas (últimos 90 días mínimo)
+   b. Valida datos suficientes (mínimo 30 registros)
+   c. Prepara features: cantidad_vendida, dia_semana, es_fin_semana, es_feriado
+   d. Entrena modelo Holt-Winters con statsmodels.ExponentialSmoothing
+   e. Serializa modelo con joblib.dump()
+   f. Guarda .pkl en S3: saai-tiendas/{tenant_id}/modelos/{codigo_producto}.pkl
+3. Emite evento WebSocket global al finalizar
+4. Retorna estadísticas: total_modelos_entrenados, total_errores
 
---------------------
+Manejo de features:
+- dia_semana: calculado dinámicamente con datetime.weekday() (0=Lunes, 6=Domingo)
+- es_fin_semana: 1 si dia_semana >= 5, else 0
+- es_feriado: calculado con librería holidays.Peru() (actualizada cada año)
+- promedio_7d: calculado desde ventas históricas
 
-Lambda: EntrenarModelo
-Ruta: Interna (invocado por GeneraDataset)
+Notas:
+- Timeout: 300 segundos (5 minutos)
+- Memory: 1024 MB
+- Costo aproximado: $0.03/mes para 1000 modelos
+- NO se usa GeneraDataset separado (todo en una Lambda)
 
-Descripción:
-Lanza un SageMaker Training Job usando el dataset en S3. Al finalizar, publica el modelo
-en S3 (artifacts) y/o actualiza el endpoint (según estrategia).
-
-Servicios:
-- SageMaker Training Job
-- S3: saai-tiendas/codigo-reporte-SAAI/ml-modelo
-- (Opcional) puede actualizar/crear endpoint
 
 
 ====================================
