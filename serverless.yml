@@ -873,7 +873,7 @@ resources:
   Outputs:
     RestApiId:
       Value:
-        Ref: RestApiApigEvent
+        Ref: ApiGatewayRestApi
       Export:
         Name: ${self:service}-${self:provider.stage}-RestApiId
 
