@@ -48,15 +48,10 @@ def handler(event, context):
     Request:
     {
         "body": {
-            "cliente": "Juan Pérez",
             "productos": [
                 {
-                    "codigo_producto": "P001",
+                    "codigo_producto": "T002P001",
                     "cantidad": 2
-                },
-                {
-                    "codigo_producto": "P002",
-                    "cantidad": 1
                 }
             ],
             "metodo_pago": "efectivo"
@@ -68,8 +63,9 @@ def handler(event, context):
         "success": true,
         "message": "Venta registrada",
         "data": {
-            "codigo_venta": "V001",
-            "total": 148.09
+            "codigo_venta": "T002V015",
+            "total": 7.0,
+            "fecha": "2025-11-08T15:30:00-05:00"
         }
     }
     """
@@ -90,13 +86,9 @@ def handler(event, context):
         if not body:
             return validation_error_response("Request body requerido")
         
-        # Validar campos obligatorios
-        cliente = body.get('cliente')
+        # Validar campos obligatorios según SAAI oficial
         productos = body.get('productos')
         metodo_pago = body.get('metodo_pago')
-        
-        if not cliente:
-            return validation_error_response("Cliente es obligatorio")
         
         if not productos or not isinstance(productos, list) or len(productos) == 0:
             return validation_error_response("Productos es obligatorio y debe ser una lista no vacía")
@@ -175,7 +167,6 @@ def handler(event, context):
         
         venta_data = {
             'codigo_venta': codigo_venta,
-            'cliente': str(cliente).strip(),
             'productos': [  # Cambiar de 'items' a 'productos'
                 {
                     'codigo_producto': producto['codigo_producto'],
@@ -225,7 +216,6 @@ def handler(event, context):
                 'codigo_tienda': tenant_id,
                 'codigo_venta': codigo_venta,
                 'total': decimal_to_float(total),
-                'cliente': cliente,
                 'fecha': fecha_actual,
                 'trabajador': codigo_usuario or 'SISTEMA'
             }
@@ -251,8 +241,6 @@ def handler(event, context):
                 'event_type': 'venta_registrada',
                 'payload': {
                     'codigo_venta': codigo_venta,
-                    'cliente': cliente,
-                    'total': decimal_to_float(total),
                     'items_count': len(productos_procesados),
                     'metodo_pago': metodo_pago,
                     'trabajador': codigo_usuario or 'SISTEMA',
