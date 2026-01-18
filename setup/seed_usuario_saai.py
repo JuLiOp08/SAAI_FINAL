@@ -26,11 +26,15 @@ SAAI_USER = {
 
 def hash_password(password):
     """
-    Hash de password usando SHA-256
-    Usa una salt fija para consistencia (setup inicial, no producción crítica)
+    Hash de password usando PBKDF2-HMAC-SHA256 con salt aleatorio
     """
-    salt = os.environ.get('JWT_SECRET', 'saai-secret-key-2025')
-    return hashlib.sha256(f"{password}{salt}".encode('utf-8')).hexdigest()
+    # Generar salt aleatorio de 32 bytes
+    salt = os.urandom(32)
+    
+    # Hash PBKDF2 con 100,000 iteraciones
+    password_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
+    
+    return password_hash.hex(), salt.hex()
 
 
 def handler(event, context):
@@ -49,9 +53,9 @@ def handler(event, context):
     }
     """
     try:
-        # 1. Hash de la password con SHA-256
+        # 1. Hash de la password con PBKDF2
         password_plain = SAAI_USER['password']
-        password_hash = hash_password(password_plain)
+        password_hash, salt = hash_password(password_plain)
         
         # 2. Timestamp actual (America/Lima)
         now = datetime.utcnow().isoformat() + '-05:00'
@@ -69,6 +73,7 @@ def handler(event, context):
                 'nombre': SAAI_USER['nombre'],
                 'email': SAAI_USER['email'],
                 'password': password_hash,
+                'salt': salt,
                 'role': 'saai',
                 'estado': 'ACTIVO',
                 'created_at': now,

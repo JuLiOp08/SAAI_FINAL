@@ -68,12 +68,18 @@ def validar_credenciales_usuario(usuario, password):
             return None
         
         # Validar contraseña
-        password_hasheado = usuario_data.get('password')
-        if not password_hasheado:
+        password_hash = usuario_data.get('password') or usuario_data.get('password_hash')
+        salt = usuario_data.get('salt')
+        
+        if not password_hash:
             logger.error(f"Usuario sin contraseña configurada: {usuario}")
             return None
         
-        if not verificar_password(password, password_hasheado):
+        if not salt:
+            logger.error(f"Usuario sin salt configurado: {usuario}")
+            return None
+        
+        if not verificar_password(password, password_hash, salt):
             logger.warning(f"Contraseña incorrecta para usuario: {usuario}")
             return None
         
@@ -219,12 +225,18 @@ def validar_credenciales_por_email(tenant_id, email, password):
             return None
         
         # Validar contraseña
-        password_hasheado = usuario_data.get('password')
-        if not password_hasheado:
+        password_hash = usuario_data.get('password') or usuario_data.get('password_hash')
+        salt = usuario_data.get('salt')
+        
+        if not password_hash:
             logger.error(f"Usuario sin contraseña configurada: {email}")
             return None
         
-        if not verificar_password(password, password_hasheado):
+        if not salt:
+            logger.error(f"Usuario sin salt configurado: {email}")
+            return None
+        
+        if not verificar_password(password, password_hash, salt):
             logger.warning(f"Contraseña incorrecta para usuario: {email}")
             return None
         
@@ -347,41 +359,48 @@ def determinar_tipo_usuario(usuario):
 
 def hashear_password(password):
     """
-    Hashea una contraseña usando SHA-256 con salt
+    Hashea una contraseña usando PBKDF2-HMAC-SHA256 con salt aleatorio
     
     Args:
         password (str): Contraseña en texto plano
         
     Returns:
-        str: Password hasheado
+        tuple: (password_hash_hex, salt_hex)
     """
     try:
-        # Usar JWT_SECRET como salt (consistente con seed_usuario_saai.py)
-        salt = os.environ.get('JWT_SECRET', 'saai-secret-key-2025')
-        password_con_salt = password + salt
+        # Generar salt aleatorio de 32 bytes
+        salt = os.urandom(32)
         
-        # Hash SHA-256
-        hash_object = hashlib.sha256(password_con_salt.encode('utf-8'))
-        return hash_object.hexdigest()
+        # Hash PBKDF2 con 100,000 iteraciones
+        password_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
+        
+        return password_hash.hex(), salt.hex()
         
     except Exception as e:
         logger.error(f"Error hasheando password: {e}")
-        return None
+        return None, None
 
-def verificar_password(password_texto, password_hasheado):
+def verificar_password(password_texto, password_hash_hex, salt_hex):
     """
-    Verifica si una contraseña coincide con el hash
+    Verifica si una contraseña coincide con el hash usando PBKDF2
     
     Args:
         password_texto (str): Contraseña en texto plano
-        password_hasheado (str): Hash almacenado
+        password_hash_hex (str): Hash almacenado en formato hex
+        salt_hex (str): Salt almacenado en formato hex
         
     Returns:
         bool: True si coincide, False en caso contrario
     """
     try:
-        hash_calculado = hashear_password(password_texto)
-        return hash_calculado == password_hasheado
+        # Convertir salt de hex a bytes
+        salt = bytes.fromhex(salt_hex)
+        
+        # Calcular hash con el mismo salt
+        hash_calculado = hashlib.pbkdf2_hmac('sha256', password_texto.encode(), salt, 100000)
+        
+        # Comparar hashes
+        return hash_calculado.hex() == password_hash_hex
         
     except Exception as e:
         logger.error(f"Error verificando password: {e}")

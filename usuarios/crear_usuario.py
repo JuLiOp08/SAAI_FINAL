@@ -106,7 +106,7 @@ def handler(event, context):
             'nombre': nombre,
             'email': email,
             'role': role,
-            'password_hash': password_hash.hex(),
+            'password': password_hash.hex(),
             'salt': salt.hex(),
             'estado': 'ACTIVO',
             'created_at': fecha_actual,

@@ -127,7 +127,7 @@ def handler(event, context):
             'nombre': str(admin_data['nombre']).strip(),
             'email': str(admin_data['email']).strip().lower(),
             'role': ROLE_MAPPING_REVERSE['admin'],
-            'password_hash': password_hash.hex(),
+            'password': password_hash.hex(),
             'salt': salt.hex(),
             'estado': ESTADO_ACTIVO,
             'created_at': fecha_actual,
