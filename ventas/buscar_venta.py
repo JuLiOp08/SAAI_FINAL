@@ -26,8 +26,8 @@ def handler(event, context):
     Request:
     {
         "body": {
-            "criterio": "cliente",
-            "valor": "Juan"
+            "criterio": "fecha",
+            "valor": "2025-11-08"
         }
     }
     
@@ -36,14 +36,13 @@ def handler(event, context):
         "success": true,
         "data": [
             {
-                "codigo_venta": "V001",
-                "cliente": "Juan Pérez",
+                "codigo_venta": "T002V001",
                 "total": 148.09,
                 "fecha": "2025-11-08",
                 "metodo_pago": "efectivo",
-                "productos": [
+                "items": [
                     {
-                        "codigo_producto": "P001",
+                        "codigo_producto": "T002P001",
                         "nombre_producto": "Producto 1",
                         "cantidad": 2,
                         "precio_unitario": 50.0,
@@ -95,9 +94,6 @@ def handler(event, context):
             if criterio == 'codigo_venta':
                 if str(venta_data.get('codigo_venta', '')).lower() == valor_lower:
                     match_found = True
-            elif criterio == 'cliente':
-                if valor_lower in str(venta_data.get('cliente', '')).lower():
-                    match_found = True
             elif criterio == 'fecha':
                 if str(venta_data.get('fecha', '')) == str(valor):
                     match_found = True
@@ -148,11 +144,10 @@ def handler(event, context):
                     'cliente': venta_data.get('cliente'),
                     'total': decimal_to_float(venta_data.get('total')),
                     'fecha': venta_data.get('fecha'),
+                    'total': decimal_to_float(venta_data.get('total')),
+                    'fecha': venta_data.get('fecha'),
                     'metodo_pago': venta_data.get('metodo_pago'),
-                    'productos': productos_response
-                }
-                
-                found_ventas.append(venta_response)
+                    'itemappend(venta_response)
         
         # Ordenar por fecha descendente
         found_ventas.sort(key=lambda x: x.get('fecha', ''), reverse=True)

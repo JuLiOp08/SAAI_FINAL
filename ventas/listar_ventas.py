@@ -23,24 +23,20 @@ def handler(event, context):
     GET /ventas - Listar ventas paginado
     
     Según documento SAAI (TRABAJADOR):
-    Query Params: limit, last_evaluated_key, fecha_inicio, fecha_fin, cliente
+    Query Params: limit, next_token
     
     Response:
     {
         "success": true,
-        "data": [
-            {
-                "codigo_venta": "V001",
-                "cliente": "Juan Pérez",
-                "total": 148.09,
-                "fecha": "2025-11-08",
-                "metodo_pago": "efectivo"
-            }
-        ],
-        "pagination": {
-            "total": 1,
-            "limit": 50,
-            "last_evaluated_key": null
+        "data": {
+            "ventas": [
+                {
+                    "codigo_venta": "T002V015",
+                    "total": 7.0,
+                    "fecha": "2025-11-08T15:30:00-05:00"
+                }
+            ],
+            "next_token": "..."
         }
     }
     """
@@ -71,7 +67,6 @@ def handler(event, context):
         # Aplicar filtros opcionales
         fecha_inicio = query_params.get('fecha_inicio')
         fecha_fin = query_params.get('fecha_fin')
-        cliente_filter = query_params.get('cliente')
         
         filtered_ventas = []
         for venta_data in ventas:
@@ -86,17 +81,11 @@ def handler(event, context):
             if fecha_fin and venta_data.get('fecha', '') > fecha_fin:
                 continue
             
-            # Filtro por cliente
-            if cliente_filter and cliente_filter.lower() not in venta_data.get('cliente', '').lower():
-                continue
-            
             # Convertir Decimal a float para response
             venta_response = {
                 'codigo_venta': venta_data.get('codigo_venta'),
-                'cliente': venta_data.get('cliente'),
                 'total': decimal_to_float(venta_data.get('total')),
-                'fecha': venta_data.get('fecha'),
-                'metodo_pago': venta_data.get('metodo_pago')
+                'fecha': venta_data.get('fecha')
             }
             
             filtered_ventas.append(venta_response)
