@@ -95,14 +95,20 @@ def handler(event, context):
             raise Exception('Unauthorized')
         
         # Extraer información del ARN para policy
+        # Generar ARN con wildcard para permitir todos los recursos
+        # Formato: arn:aws:execute-api:region:account:api-id/stage/*/resource/*
         arn_parts = method_arn.split(':')
-        api_gateway_arn = ':'.join(arn_parts[:4]) + ':' + arn_parts[4]
+        api_gateway_arn_base = ':'.join(arn_parts[:5])  # arn:aws:execute-api:region:account-id
+        stage_and_resource = arn_parts[5].split('/')  # ['api-id', 'stage', 'METHOD', 'resource']
+        
+        # Construir ARN con wildcard para permitir todos los métodos y recursos
+        resource_arn = f"{api_gateway_arn_base}:{stage_and_resource[0]}/{stage_and_resource[1]}/*"
         
         # Generar claims para el context
         authorizer_context = generar_claims_authorizer(payload)
         
         # Crear policy IAM de autorización
-        policy = generar_policy_iam('Allow', method_arn, authorizer_context)
+        policy = generar_policy_iam('Allow', resource_arn, authorizer_context)
         
         logger.info(f"Autorización exitosa: usuario={codigo_usuario}, tenant={tenant_id}, rol={rol}")
         
