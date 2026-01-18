@@ -204,7 +204,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"saai@platform.com\",\n  \"password\": \"saai123456\"\n}"
+							"raw": "{\n  \"email\": \"saai@saai.com\",\n  \"password\": \"admin123\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/login",
@@ -430,7 +430,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nombre\": \"Coca Cola 500ml\",\n  \"categoria\": \"Bebidas\",\n  \"precio_compra\": 1.50,\n  \"precio_venta\": 2.50,\n  \"stock\": 100,\n  \"stock_minimo\": 10\n}"
+							"raw": "{\n  \"nombre\": \"Coca Cola 500ml\",\n  \"precio\": 3.5,\n  \"stock\": 20,\n  \"categoria\": \"bebidas\",\n  \"descripcion\": \"Botella 500ml\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/productos",
@@ -589,7 +589,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"productos\": [\n    {\n      \"codigo_producto\": \"P001\",\n      \"cantidad\": 3\n    },\n    {\n      \"codigo_producto\": \"P002\",\n      \"cantidad\": 2\n    }\n  ]\n}"
+							"raw": "{\n  \"productos\": [\n    {\n      \"codigo_producto\": \"T002P001\",\n      \"cantidad\": 2\n    }\n  ]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/ventas/calcular",
@@ -636,7 +636,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"productos\": [\n    {\n      \"codigo_producto\": \"P001\",\n      \"cantidad\": 3\n    },\n    {\n      \"codigo_producto\": \"P002\",\n      \"cantidad\": 2\n    }\n  ],\n  \"metodo_pago\": \"EFECTIVO\"\n}"
+							"raw": "{\n  \"productos\": [\n    {\n      \"codigo_producto\": \"T002P001\",\n      \"cantidad\": 2\n    }\n  ],\n  \"metodo_pago\": \"efectivo\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/ventas",
@@ -701,7 +701,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"fecha_inicio\": \"2025-01-01\",\n  \"fecha_fin\": \"2025-12-31\"\n}"
+							"raw": "{\n  \"criterio\": \"fecha_rango\",\n  \"valor\": {\n    \"desde\": \"2025-11-01\",\n    \"hasta\": \"2025-11-08\"\n  }\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/ventas/buscar",
@@ -754,7 +754,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"concepto\": \"Alquiler local\",\n  \"monto\": 800.00,\n  \"categoria\": \"FIJOS\"\n}"
+							"raw": "{\n  \"descripcion\": \"Pago proveedor\",\n  \"monto\": 150.0,\n  \"categoria\": \"proveedores\",\n  \"fecha\": \"2025-11-08\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/gastos",
@@ -819,7 +819,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"query\": \"alquiler\"\n}"
+							"raw": "{\n  \"criterio\": \"descripcion\",\n  \"valor\": \"Pago\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/gastos/buscar",

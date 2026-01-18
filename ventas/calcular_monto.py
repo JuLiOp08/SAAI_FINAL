@@ -142,7 +142,10 @@ def handler(event, context):
         
         logger.info(f"Calculado monto de venta para {len(productos)} productos en tienda {tenant_id}. Total: {decimal_to_float(total)}")
         
-        return success_response(data=calculation_data)
+        return success_response(
+            mensaje="Monto calculado",
+            data=calculation_data
+        )
         
     except Exception as e:
         logger.error(f"Error calculando monto de venta: {str(e)}")

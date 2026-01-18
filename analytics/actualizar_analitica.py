@@ -208,7 +208,7 @@ def handler(event, context):
             logger.warning(f"Error enviando notificación WebSocket: {str(ws_error)}")
             # No fallar por WebSocket
         
-        return success_response("Analítica actualizada")
+        return success_response(mensaje="Analítica actualizada")
         
     except Exception as e:
         logger.error(f"Error actualizando analítica: {str(e)}")
