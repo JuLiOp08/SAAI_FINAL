@@ -462,7 +462,7 @@ def verificar_tienda_activa(tenant_id):
             return False
         
         estado = tienda_data.get('estado')
-        if estado != 'ACTIVO':
+        if estado != 'ACTIVO' and estado != 'ACTIVA':
             logger.warning(f"Tienda inactiva: {tenant_id}, estado: {estado}")
             return False
         
