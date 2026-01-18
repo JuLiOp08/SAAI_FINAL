@@ -141,13 +141,12 @@ def handler(event, context):
                 
                 venta_response = {
                     'codigo_venta': venta_data.get('codigo_venta'),
-                    'cliente': venta_data.get('cliente'),
-                    'total': decimal_to_float(venta_data.get('total')),
-                    'fecha': venta_data.get('fecha'),
                     'total': decimal_to_float(venta_data.get('total')),
                     'fecha': venta_data.get('fecha'),
                     'metodo_pago': venta_data.get('metodo_pago'),
-                    'itemappend(venta_response)
+                    'items': productos_response
+                }
+                found_ventas.append(venta_response)
         
         # Ordenar por fecha descendente
         found_ventas.sort(key=lambda x: x.get('fecha', ''), reverse=True)
