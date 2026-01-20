@@ -323,18 +323,19 @@ functions:
   # =================================================================
   ActualizarAnalitica:
     handler: analytics/actualizar_analitica.handler
-    description: Calcular métricas, publica SNS + WebSocket
+    description: Procesa TODAS las tiendas activas - EventBridge ONLY
     timeout: 60
     events:
-      - http:
-          path: /analitica
-          method: post
-          cors: true
-          authorizer: authorizer
+      # HTTP endpoint DESHABILITADO - solo EventBridge
+      # - http:
+      #     path: /analitica
+      #     method: post
+      #     cors: true
+      #     authorizer: authorizer
       - schedule:
           rate: rate(4 hours)
           enabled: true
-          description: "Actualizar analítica automáticamente cada 4 horas"
+          description: "Actualizar analítica automáticamente para todas las tiendas activas"
 
   VerAnalitica:
     handler: analytics/ver_analitica.handler

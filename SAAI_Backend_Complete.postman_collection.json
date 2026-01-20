@@ -898,7 +898,7 @@
 			"name": "6. ANALYTICS",
 			"item": [
 				{
-					"name": "Actualizar Analítica",
+					"name": "[DEPRECATED] Actualizar Analítica",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -924,7 +924,7 @@
 								"analitica"
 							]
 						},
-						"description": "Calcular y guardar analítica para 3 periodos (dia, semana, mes). Automático vía EventBridge cada 4h. Solo rol admin."
+						"description": "⚠️ DEPRECATED: Este endpoint ya NO es público.\n\nActualizarAnalitica se ejecuta SOLO desde EventBridge (cada 4 horas) y procesa TODAS las tiendas activas automáticamente.\n\nSi se llama manualmente, retornará error 403.\n\nFrontend debe usar únicamente 'Ver Analítica' para consultar datos ya calculados."
 					},
 					"response": []
 				},

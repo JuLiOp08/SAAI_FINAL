@@ -28,55 +28,93 @@ ALERTAS_TOPIC_ARN = os.environ.get('ALERTAS_SNS_TOPIC_ARN')
 
 def handler(event, context):
     """
-    POST /analitica (EventBridge automático cada 4 horas)
+    EventBridge automático cada 4 horas (NO es endpoint público)
     
-    Calcula y guarda métricas agregadas para los 3 periodos: dia, semana, mes.
-    Emite alertas en SNS AlertasSAAI + notificación WebSocket mínima.
+    Procesa TODAS las tiendas activas del sistema.
+    Para cada tienda, calcula y guarda métricas agregadas para 3 periodos: dia, semana, mes.
+    Emite alertas en SNS AlertasSAAI + notificación WebSocket mínima por tienda.
     
-    NOTA: Este endpoint se ejecuta principalmente desde EventBridge (sin JWT).
-    Calcula automáticamente los 3 periodos y guarda 3 registros en t_analitica.
+    ARQUITECTURA:
+    - EventBridge trigger (cada 4h) → NO envía tenant_id
+    - Lambda consulta t_tiendas (tenant_id="SAAI") → obtiene todas las tiendas
+    - Filtra por estado="ACTIVA"
+    - Itera sobre cada tienda y calcula 3 periodos
     
-    Request EventBridge: { "tenant_id": "T001" }
-    Response: { "success": true, "mensaje": "Analítica actualizada (3 periodos)" }
+    Request EventBridge: { "source": "aws.events" }
+    Response: { "success": true, "mensaje": "Analítica actualizada para N tiendas" }
     """
     try:
-        # Detectar si viene de EventBridge o API Gateway
+        # Detectar si viene de EventBridge
         is_eventbridge = event.get('source') == 'aws.events' or 'detail-type' in event
         
-        if is_eventbridge:
-            # EventBridge: tenant_id viene en el event
-            tenant_id = event.get('tenant_id') or event.get('detail', {}).get('tenant_id')
-            codigo_usuario = 'SYSTEM_EVENTBRIDGE'
-            
-            if not tenant_id:
-                logger.error("EventBridge sin tenant_id")
-                return error_response("EventBridge sin tenant_id", 400)
-        else:
-            # API Gateway: extraer de JWT
-            tenant_id = extract_tenant_from_jwt_claims(event)
-            user_info = extract_user_from_jwt_claims(event)
-            codigo_usuario = user_info.get('codigo_usuario') if user_info else None
-            
-            if not tenant_id or not codigo_usuario:
-                return error_response("Token inválido - datos faltantes", 401)
+        if not is_eventbridge:
+            # Este endpoint NO debe ser llamado manualmente desde API Gateway
+            logger.warning("⚠️ ActualizarAnalitica llamado desde API Gateway (solo debe ejecutarse desde EventBridge)")
+            return error_response("Este endpoint solo se ejecuta automáticamente desde EventBridge", 403)
         
         # Fecha de cálculo (hoy)
         fecha_calc = datetime.now(timezone.utc)
         fecha_str = fecha_calc.strftime('%Y-%m-%d')
         
-        logger.info(f"🧮 Calculando analítica para tienda {tenant_id}, fecha {fecha_str} (3 periodos)")
+        logger.info(f"🔄 Iniciando cálculo de analítica para TODAS las tiendas activas - Fecha {fecha_str}")
         
-        # Calcular y guardar los 3 periodos
-        periodos = [
-            {'nombre': 'dia', 'dias': 1},
-            {'nombre': 'semana', 'dias': 7},
-            {'nombre': 'mes', 'dias': 30}
-        ]
+        # =================================================================
+        # OBTENER TODAS LAS TIENDAS ACTIVAS
+        # =================================================================
+        try:
+            result_tiendas = query_by_tenant(
+                os.environ['TIENDAS_TABLE'],
+                tenant_id='SAAI',  # Todas las tiendas están bajo tenant_id="SAAI"
+                include_inactive=True  # Incluimos todas para filtrar manualmente
+            )
+            
+            todas_tiendas = result_tiendas.get('items', [])
+            
+            # Filtrar solo tiendas ACTIVAS
+            tiendas_activas = [
+                t for t in todas_tiendas 
+                if t.get('data', {}).get('estado') == 'ACTIVA'
+            ]
+            
+            logger.info(f"📊 Tiendas encontradas: {len(todas_tiendas)} total, {len(tiendas_activas)} activas")
+            
+            if not tiendas_activas:
+                logger.warning("⚠️ No hay tiendas activas para procesar")
+                return success_response(
+                    mensaje="No hay tiendas activas para procesar analítica",
+                    data={"tiendas_procesadas": 0}
+                )
+                
+        except Exception as e_tiendas:
+            logger.error(f"❌ Error consultando tiendas: {str(e_tiendas)}")
+            return error_response("Error consultando tiendas", 500)
         
-        resultados_guardados = 0
-        alertas_semana = []
+        # =================================================================
+        # ITERAR SOBRE CADA TIENDA ACTIVA
+        # =================================================================
+        tiendas_procesadas = 0
+        total_periodos_guardados = 0
         
-        for periodo_info in periodos:
+        for tienda in tiendas_activas:
+            tenant_id = tienda.get('data', {}).get('codigo_tienda')
+            
+            if not tenant_id:
+                logger.warning(f"⚠️ Tienda sin codigo_tienda: {tienda.get('entity_id')}")
+                continue
+            
+            logger.info(f"\n🏪 Procesando tienda: {tenant_id}")
+            
+            # Calcular y guardar los 3 periodos para esta tienda
+            periodos = [
+                {'nombre': 'dia', 'dias': 1},
+                {'nombre': 'semana', 'dias': 7},
+                {'nombre': 'mes', 'dias': 30}
+            ]
+            
+            resultados_guardados = 0
+            alertas_semana = []
+            
+            for periodo_info in periodos:
             periodo_nombre = periodo_info['nombre']
             dias_periodo = periodo_info['dias']
             
@@ -197,40 +235,52 @@ def handler(event, context):
             else:
                 logger.error(f"  ❌ Error guardando analítica: {periodo_nombre}")
         
-        # =================================================================
-        # PUBLICAR ALERTAS EN SNS (solo las de semana)
-        # =================================================================
-        if ALERTAS_TOPIC_ARN and alertas_semana:
-            await_publiar_alertas_sns(tenant_id, alertas_semana, codigo_usuario)
+            # Fin del loop de periodos para esta tienda
         
-        logger.info(f"✅ Analítica completa: {resultados_guardados}/3 periodos guardados")
+            # =================================================================
+            # PUBLICAR ALERTAS EN SNS (solo las de semana)
+            # =================================================================
+            if ALERTAS_TOPIC_ARN and alertas_semana:
+                await_publiar_alertas_sns(tenant_id, alertas_semana, 'SYSTEM_EVENTBRIDGE')
         
-        # =================================================================
-        # EMITIR NOTIFICACIÓN WEBSOCKET (MÍNIMA)
-        # =================================================================
-        try:
-            event_payload = {
-                'tenant_id': tenant_id,
-                'event_type': 'analitica_actualizada',
-                'payload': {
-                    'timestamp': obtener_fecha_hora_peru(),
-                    'mensaje': 'Analítica actualizada. Refetch datos desde /analitica'
+            logger.info(f"  ✅ Tienda {tenant_id} completada: {resultados_guardados}/3 periodos guardados")
+            total_periodos_guardados += resultados_guardados
+        
+            # =================================================================
+            # EMITIR NOTIFICACIÓN WEBSOCKET (una por tienda)
+            # =================================================================
+            try:
+                event_payload = {
+                    'tenant_id': tenant_id,
+                    'event_type': 'analitica_actualizada',
+                    'payload': {
+                        'timestamp': obtener_fecha_hora_peru(),
+                        'mensaje': 'Analítica actualizada. Refetch datos desde /analitica'
+                    }
                 }
-            }
             
-            lambda_client.invoke(
-                FunctionName=os.environ['EMITIR_EVENTOS_WS_FUNCTION_NAME'],
-                InvocationType='Event',
-                Payload=json.dumps(event_payload)
-            )
+                lambda_client.invoke(
+                    FunctionName=os.environ['EMITIR_EVENTOS_WS_FUNCTION_NAME'],
+                    InvocationType='Event',
+                    Payload=json.dumps(event_payload)
+                )
             
-            logger.info(f"🔔 Notificación WebSocket 'analitica_actualizada' enviada")
-        except Exception as ws_error:
-            logger.warning(f"Error enviando notificación WebSocket: {str(ws_error)}")
+                logger.info(f"  🔔 WebSocket 'analitica_actualizada' enviado para {tenant_id}")
+            except Exception as ws_error:
+                logger.warning(f"  ⚠️ Error enviando WebSocket para {tenant_id}: {str(ws_error)}")
+            
+            tiendas_procesadas += 1
+        
+        # Fin del loop de tiendas
+        
+        logger.info(f"\n✅ ANALÍTICA COMPLETA: {tiendas_procesadas} tiendas procesadas, {total_periodos_guardados} periodos guardados")
         
         return success_response(
-            mensaje=f"Analítica actualizada ({resultados_guardados}/3 periodos)",
-            data={"periodos_guardados": resultados_guardados}
+            mensaje=f"Analítica actualizada para {tiendas_procesadas} tiendas",
+            data={
+                "tiendas_procesadas": tiendas_procesadas,
+                "total_periodos_guardados": total_periodos_guardados
+            }
         )
         
     except Exception as e:

@@ -1089,34 +1089,15 @@ Response:
   }
 }
 
+
 ==================================================
 ANALÍTICA Y ALERTAS
 ==================================================
 
-Lambda: ActualizarAnalitica
-Método: POST
-Path: /analitica
-
-Request:
-{
-  "body": {}
-}
-
-NOTA: 
-- Este endpoint se ejecuta automáticamente cada 4 horas vía EventBridge
-- Calcula y guarda 3 periodos: dia (1d), semana (7d), mes (30d)
-- Frontend NO debe llamar este endpoint, solo VerAnalitica
-
-Response:
-{
-  "success": true,
-  "mensaje": "Analítica actualizada (3/3 periodos)",
-  "data": {
-    "periodos_guardados": 3
-  }
-}
-
-(Internamente dispara SNS: AlertasSAAI → GuardarNotificacion)
+NOTA IMPORTANTE:
+ActualizarAnalitica NO es un endpoint público.
+Se ejecuta SOLO desde EventBridge (automático cada 4 horas).
+El frontend NUNCA debe llamar este endpoint - solo usa VerAnalitica.
 
 ------------------------------------
 
@@ -1516,7 +1497,37 @@ ANALÍTICA + ALERTAS (ADMIN)
 ====================================
 
 Lambda: ActualizarAnalitica
-Ruta: POST /analitica
+Ruta: EventBridge ONLY (NO es endpoint HTTP)
+
+Descripción:
+PROCESO AUTOMÁTICO ejecutado por EventBridge cada 4 horas.
+NO tiene ruta HTTP pública (frontend NUNCA lo llama).
+
+Arquitectura multi-tenant:
+1. EventBridge dispara lambda SIN tenant_id
+2. Lambda consulta t_tiendas (tenant_id="SAAI") → obtiene todas las tiendas
+3. Filtra por estado="ACTIVA"
+4. Itera sobre cada tienda activa:
+   a. Calcula 3 periodos (dia, semana, mes)
+   b. Guarda métricas en t_analitica
+   c. Publica alertas en SNS AlertasSAAI
+   d. Emite WebSocket 'analitica_actualizada'
+
+Tablas:
+- t_tiendas (consulta lista, tenant_id="SAAI")
+- t_analitica (guarda métricas por tienda/periodo)
+- (lectura) t_ventas, t_productos, t_usuarios, t_gastos
+
+Servicios:
+- EventBridge: trigger cada 4 horas
+- SNS: AlertasSAAI (con tenant_id en MessageAttributes)
+- WebSocket: 'analitica_actualizada' por tienda
+
+Flujo:
+1. EventBridge dispara
+2. Consulta t_tiendas (SAAI) → filtra ACTIVA
+3. Para cada tienda: 3 periodos + alertas + WebSocket
+4. Retorna: {tiendas_procesadas, total_periodos_guardados}
 
 Descripción:
 Calcula y guarda métricas agregadas (por día/semana/mes) de la tienda: ventas, ganancia,
