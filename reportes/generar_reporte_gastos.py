@@ -16,7 +16,8 @@ from utils import (
     extract_user_from_jwt_claims,
     put_item_standard,
     query_by_tenant,
-    increment_counter
+    increment_counter,
+    normalizar_texto
 )
 
 logger = logging.getLogger()
@@ -115,10 +116,10 @@ def handler(event, context):
             
             # Datos de gasto individual
             datos_gastos.append({
-                'Código Gasto': gasto.get('codigo_gasto', ''),
+                'Codigo Gasto': gasto.get('codigo_gasto', ''),
                 'Fecha': fecha_gasto,
-                'Descripción': gasto.get('descripcion', ''),
-                'Categoría': categoria,
+                'Descripcion': normalizar_texto(gasto.get('descripcion', '')),
+                'Categoria': normalizar_texto(categoria),
                 'Monto': monto,
                 'Registrado Por': gasto.get('codigo_usuario', ''),
                 'Estado': gasto.get('estado', 'ACTIVO'),
@@ -126,11 +127,12 @@ def handler(event, context):
             })
             
             # Acumular por categoría
-            if categoria not in datos_categorias:
-                datos_categorias[categoria] = {'Cantidad': 0, 'Total': 0}
+            categoria_normalizada = normalizar_texto(categoria)
+            if categoria_normalizada not in datos_categorias:
+                datos_categorias[categoria_normalizada] = {'Cantidad': 0, 'Total': 0}
             
-            datos_categorias[categoria]['Cantidad'] += 1
-            datos_categorias[categoria]['Total'] += monto
+            datos_categorias[categoria_normalizada]['Cantidad'] += 1
+            datos_categorias[categoria_normalizada]['Total'] += monto
             
             # Acumular por mes
             if fecha_gasto:
@@ -155,9 +157,9 @@ def handler(event, context):
         
         # Sección de encabezado
         csv_buffer.write("REPORTE DE GASTOS\n")
-        csv_buffer.write(f"Código Reporte: {codigo_reporte}\n")
+        csv_buffer.write(f"Codigo Reporte: {codigo_reporte}\n")
         csv_buffer.write(f"Tienda: {tenant_id}\n")
-        csv_buffer.write(f"Período: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
+        csv_buffer.write(f"Periodo: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
         csv_buffer.write(f"Generado por: {codigo_usuario}\n")
         csv_buffer.write(f"Fecha: {fecha_actual[:19]}\n")
         csv_buffer.write("\n")
@@ -165,23 +167,23 @@ def handler(event, context):
         # Sección de resumen
         csv_buffer.write("RESUMEN\n")
         writer = csv.writer(csv_buffer)
-        writer.writerow(['Métrica', 'Valor'])
+        writer.writerow(['Metrica', 'Valor'])
         writer.writerow(['Total Gastos', total_gastos])
         writer.writerow(['Total Egresos', f"S/ {total_egresos:.2f}"])
         writer.writerow(['Promedio por Gasto', f"S/ {total_egresos/total_gastos:.2f}" if total_gastos > 0 else 'S/ 0.00'])
-        writer.writerow(['Categorías Únicas', len(datos_categorias)])
+        writer.writerow(['Categorias Unicas', len(datos_categorias)])
         writer.writerow(['Mayor Gasto', f"S/ {mayor_gasto:.2f}"])
         csv_buffer.write("\n")
         
         # Sección de gastos detallados
         csv_buffer.write("DETALLE DE GASTOS\n")
-        writer.writerow(['Código Gasto', 'Fecha', 'Descripción', 'Categoría', 'Monto', 'Registrado Por', 'Estado', 'Fecha Registro'])
+        writer.writerow(['Codigo Gasto', 'Fecha', 'Descripcion', 'Categoria', 'Monto', 'Registrado Por', 'Estado', 'Fecha Registro'])
         for gasto in datos_gastos:
             writer.writerow([
-                gasto['Código Gasto'],
+                gasto['Codigo Gasto'],
                 gasto['Fecha'],
-                gasto['Descripción'],
-                gasto['Categoría'],
+                gasto['Descripcion'],
+                gasto['Categoria'],
                 f"{gasto['Monto']:.2f}",
                 gasto['Registrado Por'],
                 gasto['Estado'],
@@ -190,8 +192,8 @@ def handler(event, context):
         csv_buffer.write("\n")
         
         # Sección de gastos por categoría
-        csv_buffer.write("GASTOS POR CATEGORÍA\n")
-        writer.writerow(['Categoría', 'Cantidad Gastos', 'Total Monto', 'Porcentaje'])
+        csv_buffer.write("GASTOS POR CATEGORIA\n")
+        writer.writerow(['Categoria', 'Cantidad Gastos', 'Total Monto', 'Porcentaje'])
         categorias_sorted = sorted(datos_categorias.items(), key=lambda x: x[1]['Total'], reverse=True)
         for categoria, data in categorias_sorted:
             porcentaje = (data['Total'] / total_egresos * 100) if total_egresos > 0 else 0

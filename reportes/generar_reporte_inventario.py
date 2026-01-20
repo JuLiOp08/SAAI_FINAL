@@ -14,7 +14,8 @@ from utils import (
     extract_user_from_jwt_claims,
     put_item_standard,
     query_by_tenant,
-    increment_counter
+    increment_counter,
+    normalizar_texto
 )
 
 logger = logging.getLogger()
@@ -100,15 +101,15 @@ def handler(event, context):
                 estado_stock = "NORMAL"
             
             datos_excel.append({
-                'Código Producto': producto.get('codigo_producto', ''),
-                'Nombre': producto.get('nombre', ''),
-                'Categoría': producto.get('categoria', ''),
-                'Descripción': producto.get('descripcion', ''),
+                'Codigo Producto': producto.get('codigo_producto', ''),
+                'Nombre': normalizar_texto(producto.get('nombre', '')),
+                'Categoria': normalizar_texto(producto.get('categoria', '')),
+                'Descripcion': normalizar_texto(producto.get('descripcion', '')),
                 'Precio Unitario': precio,
                 'Stock Actual': stock,
                 'Estado Stock': estado_stock,
                 'Valor Total': valor_total,
-                'Fecha Creación': producto.get('created_at', '')[:10]
+                'Fecha Creacion': producto.get('created_at', '')[:10]
             })
         
         # =================================================================
@@ -120,7 +121,7 @@ def handler(event, context):
         
         # Encabezado resumen
         csv_writer.writerow(['REPORTE DE INVENTARIO'])
-        csv_writer.writerow(['Código Reporte:', codigo_reporte])
+        csv_writer.writerow(['Codigo Reporte:', codigo_reporte])
         csv_writer.writerow(['Tienda:', tenant_id])
         csv_writer.writerow(['Generado por:', codigo_usuario])
         csv_writer.writerow(['Fecha:', fecha_actual])
@@ -128,29 +129,29 @@ def handler(event, context):
         
         # Encabezados de productos
         csv_writer.writerow([
-            'Código Producto',
+            'Codigo Producto',
             'Nombre',
-            'Categoría',
-            'Descripción',
+            'Categoria',
+            'Descripcion',
             'Precio Unitario',
             'Stock Actual',
             'Estado Stock',
             'Valor Total',
-            'Fecha Creación'
+            'Fecha Creacion'
         ])
         
         # Datos de productos
         for dato in datos_excel:
             csv_writer.writerow([
-                dato['Código Producto'],
+                dato['Codigo Producto'],
                 dato['Nombre'],
-                dato['Categoría'],
-                dato['Descripción'],
+                dato['Categoria'],
+                dato['Descripcion'],
                 f"{dato['Precio Unitario']:.2f}",
                 dato['Stock Actual'],
                 dato['Estado Stock'],
                 f"{dato['Valor Total']:.2f}",
-                dato['Fecha Creación']
+                dato['Fecha Creacion']
             ])
         
         # Resumen al final

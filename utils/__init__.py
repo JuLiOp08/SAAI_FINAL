@@ -95,6 +95,13 @@ from .jwt_utils import (
     validar_token_en_base_datos
 )
 
+from .text_normalizer import (
+    normalizar_texto,
+    normalizar_dict_keys,
+    normalizar_dict_values,
+    normalizar_lista_dicts
+)
+
 from .pagination_utils import (
     extract_pagination_params,
     create_next_token,

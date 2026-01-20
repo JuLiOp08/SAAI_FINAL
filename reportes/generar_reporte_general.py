@@ -17,7 +17,8 @@ from utils import (
     extract_user_from_jwt_claims,
     put_item_standard,
     query_by_tenant,
-    increment_counter
+    increment_counter,
+    normalizar_texto
 )
 
 logger = logging.getLogger()
@@ -143,9 +144,9 @@ def handler(event, context):
         
         # Sección de encabezado principal
         csv_buffer.write("REPORTE GENERAL\n")
-        csv_buffer.write(f"Código Reporte: {codigo_reporte}\n")
+        csv_buffer.write(f"Codigo Reporte: {codigo_reporte}\n")
         csv_buffer.write(f"Tienda: {tenant_id}\n")
-        csv_buffer.write(f"Período: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
+        csv_buffer.write(f"Periodo: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
         csv_buffer.write(f"Generado por: {codigo_usuario}\n")
         csv_buffer.write(f"Fecha: {fecha_actual[:19]}\n")
         csv_buffer.write("\n")
@@ -160,7 +161,7 @@ def handler(event, context):
         csv_buffer.write("\n")
         
         writer = csv.writer(csv_buffer)
-        writer.writerow(['Métrica', 'Valor'])
+        writer.writerow(['Metrica', 'Valor'])
         writer.writerow(['RESUMEN FINANCIERO', ''])
         writer.writerow(['Total Ingresos (Ventas)', f"S/ {total_ingresos:.2f}"])
         writer.writerow(['Total Egresos (Gastos)', f"S/ {total_egresos:.2f}"])
@@ -170,7 +171,7 @@ def handler(event, context):
         writer.writerow(['INDICADORES OPERATIVOS', ''])
         writer.writerow(['Total Productos', len(productos)])
         writer.writerow(['Productos Sin Stock', productos_sin_stock])
-        writer.writerow(['Productos Bajo Stock (≤5)', productos_bajo_stock])
+        writer.writerow(['Productos Bajo Stock (<=5)', productos_bajo_stock])
         writer.writerow(['Total Ventas', len(ventas)])
         writer.writerow(['Promedio por Venta', f"S/ {total_ingresos/len(ventas):.2f}" if ventas else 'S/ 0.00'])
         writer.writerow(['Total Gastos', len(gastos)])
@@ -187,7 +188,7 @@ def handler(event, context):
         csv_buffer.write("\n")
         
         if productos:
-            writer.writerow(['Código', 'Nombre', 'Categoría', 'Precio', 'Stock', 'Estado Stock', 'Valor Total'])
+            writer.writerow(['Codigo', 'Nombre', 'Categoria', 'Precio', 'Stock', 'Estado Stock', 'Valor Total'])
             for producto in productos:
                 stock = int(producto.get('stock', 0))
                 precio = float(producto.get('precio', 0))
@@ -202,8 +203,8 @@ def handler(event, context):
                 
                 writer.writerow([
                     producto.get('codigo_producto', ''),
-                    producto.get('nombre', ''),
-                    producto.get('categoria', ''),
+                    normalizar_texto(producto.get('nombre', '')),
+                    normalizar_texto(producto.get('categoria', '')),
                     f"{precio:.2f}",
                     stock,
                     estado_stock,
@@ -219,23 +220,23 @@ def handler(event, context):
         # =================================================================
         
         csv_buffer.write("="*60 + "\n")
-        csv_buffer.write("VENTAS DEL PERÍODO\n")
+        csv_buffer.write("VENTAS DEL PERIODO\n")
         csv_buffer.write("="*60 + "\n")
         csv_buffer.write("\n")
         
         if ventas:
-            writer.writerow(['Código Venta', 'Fecha', 'Cliente', 'Total', 'Método Pago', 'Vendedor'])
+            writer.writerow(['Codigo Venta', 'Fecha', 'Cliente', 'Total', 'Metodo Pago', 'Vendedor'])
             for venta in ventas:
                 writer.writerow([
                     venta.get('codigo_venta', ''),
                     venta.get('fecha', ''),
-                    venta.get('cliente', ''),
+                    normalizar_texto(venta.get('cliente', '')),
                     f"{float(venta.get('total', 0)):.2f}",
-                    venta.get('metodo_pago', ''),
+                    normalizar_texto(venta.get('metodo_pago', '')),
                     venta.get('codigo_usuario', '')
                 ])
         else:
-            writer.writerow(['No hay ventas en el período seleccionado'])
+            writer.writerow(['No hay ventas en el periodo seleccionado'])
         
         csv_buffer.write("\n\n")
         
@@ -244,23 +245,23 @@ def handler(event, context):
         # =================================================================
         
         csv_buffer.write("="*60 + "\n")
-        csv_buffer.write("GASTOS DEL PERÍODO\n")
+        csv_buffer.write("GASTOS DEL PERIODO\n")
         csv_buffer.write("="*60 + "\n")
         csv_buffer.write("\n")
         
         if gastos:
-            writer.writerow(['Código Gasto', 'Fecha', 'Descripción', 'Categoría', 'Monto', 'Registrado Por'])
+            writer.writerow(['Codigo Gasto', 'Fecha', 'Descripcion', 'Categoria', 'Monto', 'Registrado Por'])
             for gasto in gastos:
                 writer.writerow([
                     gasto.get('codigo_gasto', ''),
                     gasto.get('fecha', ''),
-                    gasto.get('descripcion', ''),
-                    gasto.get('categoria', ''),
+                    normalizar_texto(gasto.get('descripcion', '')),
+                    normalizar_texto(gasto.get('categoria', '')),
                     f"{float(gasto.get('monto', 0)):.2f}",
                     gasto.get('created_by', '')
                 ])
         else:
-            writer.writerow(['No hay gastos en el período seleccionado'])
+            writer.writerow(['No hay gastos en el periodo seleccionado'])
         
         csv_buffer.write("\n")
         

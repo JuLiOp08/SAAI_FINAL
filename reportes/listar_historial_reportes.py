@@ -75,7 +75,7 @@ def handler(event, context):
         
         # Filtrar por tipo si se especifica
         if tipo_filtro:
-            reportes_items = [r for r in reportes_items if r.get('tipo') == tipo_filtro]
+            reportes_items = [r for r in reportes_items if r.get('data', {}).get('tipo') == tipo_filtro]
         
         # =================================================================
         # CONSTRUIR RESPUESTA CON PRESIGNED URLS
@@ -84,16 +84,19 @@ def handler(event, context):
         reportes_response = []
         
         for reporte_item in reportes_items:
+            # Acceder a los datos dentro del campo 'data'
+            data = reporte_item.get('data', {})
+            
             # Información básica del reporte
             reporte_info = {
-                'codigo_reporte': reporte_item.get('codigo_reporte'),
-                'tipo': reporte_item.get('tipo'),
-                'fecha': reporte_item.get('fecha_generacion', '')[:10] if reporte_item.get('fecha_generacion') else '',  # Solo fecha
-                'hora': reporte_item.get('fecha_generacion', '')[11:19] if len(reporte_item.get('fecha_generacion', '')) > 10 else '',  # Solo hora
-                'estado': reporte_item.get('estado', 'COMPLETADO'),
-                'tamaño_mb': round(reporte_item.get('tamaño_bytes', 0) / 1024 / 1024, 2),
-                'generado_por': reporte_item.get('generado_por'),
-                'parametros': reporte_item.get('parametros', {}),
+                'codigo_reporte': data.get('codigo_reporte'),
+                'tipo': data.get('tipo'),
+                'fecha': data.get('fecha_generacion', '')[:10] if data.get('fecha_generacion') else '',  # Solo fecha
+                'hora': data.get('fecha_generacion', '')[11:19] if len(data.get('fecha_generacion', '')) > 10 else '',  # Solo hora
+                'estado': data.get('estado', 'COMPLETADO'),
+                'tamaño_mb': round(data.get('tamaño_bytes', 0) / 1024 / 1024, 2),
+                'generado_por': data.get('generado_por'),
+                'parametros': data.get('parametros', {}),
                 'download_url': None  # Se genera más abajo
             }
             
@@ -101,7 +104,7 @@ def handler(event, context):
             # GENERAR PRESIGNED URL FRESCO
             # =================================================================
             
-            s3_key = reporte_item.get('s3_key')
+            s3_key = data.get('s3_key')
             if s3_key and S3_BUCKET:
                 try:
                     # Verificar que el archivo existe en S3 antes de generar URL

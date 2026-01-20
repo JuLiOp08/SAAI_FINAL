@@ -16,7 +16,8 @@ from utils import (
     extract_user_from_jwt_claims,
     put_item_standard,
     query_by_tenant,
-    increment_counter
+    increment_counter,
+    normalizar_texto
 )
 
 logger = logging.getLogger()
@@ -113,11 +114,11 @@ def handler(event, context):
             
             # Datos de venta individual
             datos_ventas.append({
-                'Código Venta': venta.get('codigo_venta', ''),
+                'Codigo Venta': venta.get('codigo_venta', ''),
                 'Fecha': venta.get('fecha', ''),
-                'Cliente': venta.get('cliente', ''),
+                'Cliente': normalizar_texto(venta.get('cliente', '')),
                 'Total': total_venta,
-                'Método Pago': venta.get('metodo_pago', ''),
+                'Metodo Pago': normalizar_texto(venta.get('metodo_pago', '')),
                 'Cantidad Items': len(venta.get('productos', [])),
                 'Vendedor': venta.get('codigo_usuario', ''),
                 'Estado': venta.get('estado', 'COMPLETADA'),
@@ -134,8 +135,8 @@ def handler(event, context):
                 
                 if codigo not in datos_productos_vendidos:
                     datos_productos_vendidos[codigo] = {
-                        'Código Producto': codigo,
-                        'Nombre Producto': nombre,
+                        'Codigo Producto': codigo,
+                        'Nombre Producto': normalizar_texto(nombre),
                         'Cantidad Total': 0,
                         'Ingresos Total': 0,
                         'Precio Promedio': precio
@@ -160,9 +161,9 @@ def handler(event, context):
         
         # Sección de encabezado
         csv_buffer.write("REPORTE DE VENTAS\n")
-        csv_buffer.write(f"Código Reporte: {codigo_reporte}\n")
+        csv_buffer.write(f"Codigo Reporte: {codigo_reporte}\n")
         csv_buffer.write(f"Tienda: {tenant_id}\n")
-        csv_buffer.write(f"Período: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
+        csv_buffer.write(f"Periodo: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
         csv_buffer.write(f"Generado por: {codigo_usuario}\n")
         csv_buffer.write(f"Fecha: {fecha_actual[:19]}\n")
         csv_buffer.write("\n")
@@ -170,23 +171,23 @@ def handler(event, context):
         # Sección de resumen
         csv_buffer.write("RESUMEN\n")
         writer = csv.writer(csv_buffer)
-        writer.writerow(['Métrica', 'Valor'])
+        writer.writerow(['Metrica', 'Valor'])
         writer.writerow(['Total Ventas', total_ventas])
         writer.writerow(['Total Ingresos', f"S/ {total_ingresos:.2f}"])
         writer.writerow(['Promedio por Venta', f"S/ {total_ingresos/total_ventas:.2f}" if total_ventas > 0 else 'S/ 0.00'])
-        writer.writerow(['Productos Únicos', len(datos_productos_vendidos)])
+        writer.writerow(['Productos Unicos', len(datos_productos_vendidos)])
         csv_buffer.write("\n")
         
         # Sección de ventas detalladas
         csv_buffer.write("DETALLE DE VENTAS\n")
-        writer.writerow(['Código Venta', 'Fecha', 'Cliente', 'Total', 'Método Pago', 'Cantidad Items', 'Vendedor', 'Estado', 'Fecha Registro'])
+        writer.writerow(['Codigo Venta', 'Fecha', 'Cliente', 'Total', 'Metodo Pago', 'Cantidad Items', 'Vendedor', 'Estado', 'Fecha Registro'])
         for venta in datos_ventas:
             writer.writerow([
-                venta['Código Venta'],
+                venta['Codigo Venta'],
                 venta['Fecha'],
                 venta['Cliente'],
                 f"{venta['Total']:.2f}",
-                venta['Método Pago'],
+                venta['Metodo Pago'],
                 venta['Cantidad Items'],
                 venta['Vendedor'],
                 venta['Estado'],
@@ -196,11 +197,11 @@ def handler(event, context):
         
         # Sección de productos vendidos
         csv_buffer.write("PRODUCTOS VENDIDOS\n")
-        writer.writerow(['Código Producto', 'Nombre Producto', 'Cantidad Total', 'Ingresos Total', 'Precio Promedio'])
+        writer.writerow(['Codigo Producto', 'Nombre Producto', 'Cantidad Total', 'Ingresos Total', 'Precio Promedio'])
         productos_sorted = sorted(datos_productos_vendidos.values(), key=lambda x: x['Cantidad Total'], reverse=True)
         for producto in productos_sorted:
             writer.writerow([
-                producto['Código Producto'],
+                producto['Codigo Producto'],
                 producto['Nombre Producto'],
                 producto['Cantidad Total'],
                 f"{producto['Ingresos Total']:.2f}",
@@ -209,10 +210,10 @@ def handler(event, context):
         csv_buffer.write("\n")
         
         # Sección de métodos de pago
-        csv_buffer.write("MÉTODOS DE PAGO\n")
-        writer.writerow(['Método Pago', 'Cantidad Ventas', 'Total Ingresos'])
+        csv_buffer.write("METODOS DE PAGO\n")
+        writer.writerow(['Metodo Pago', 'Cantidad Ventas', 'Total Ingresos'])
         for metodo, data in datos_metodos_pago.items():
-            writer.writerow([metodo, data['Cantidad'], f"{data['Total']:.2f}"])
+            writer.writerow([normalizar_texto(metodo), data['Cantidad'], f"{data['Total']:.2f}"])
         
         csv_content = csv_buffer.getvalue()
         
