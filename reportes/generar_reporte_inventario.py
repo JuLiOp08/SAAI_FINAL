@@ -5,6 +5,7 @@ import logging
 import boto3
 import csv
 from io import StringIO
+from decimal import Decimal
 from utils import (
     success_response,
     error_response,
@@ -205,7 +206,7 @@ def handler(event, context):
                 "total_productos": total_productos,
                 "productos_sin_stock": productos_sin_stock,
                 "productos_bajo_stock": productos_bajo_stock,
-                "valor_total": round(total_valor, 2)
+                "valor_total": Decimal(str(round(total_valor, 2)))
             },
             "s3_bucket": S3_BUCKET,
             "s3_key": s3_key,

@@ -6,6 +6,7 @@ import boto3
 import csv
 from datetime import datetime, timedelta
 from io import StringIO
+from decimal import Decimal
 from utils import (
     success_response,
     error_response,
@@ -306,9 +307,9 @@ def handler(event, context):
             "parametros": {
                 "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
                 "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
-                "total_ingresos": total_ingresos,
-                "total_egresos": total_egresos,
-                "balance": balance
+                "total_ingresos": Decimal(str(round(total_ingresos, 2))),
+                "total_egresos": Decimal(str(round(total_egresos, 2))),
+                "balance": Decimal(str(round(balance, 2)))
             },
             "s3_bucket": S3_BUCKET,
             "s3_key": s3_key,

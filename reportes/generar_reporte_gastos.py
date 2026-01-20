@@ -7,6 +7,7 @@ import csv
 from datetime import datetime, timedelta
 from boto3.dynamodb.conditions import Key
 from io import StringIO
+from decimal import Decimal
 from utils import (
     success_response,
     error_response,
@@ -254,7 +255,7 @@ def handler(event, context):
                 "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
                 "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
                 "total_gastos": total_gastos,
-                "total_egresos": total_egresos
+                "total_egresos": Decimal(str(round(total_egresos, 2)))
             },
             "s3_bucket": S3_BUCKET,
             "s3_key": s3_key,
