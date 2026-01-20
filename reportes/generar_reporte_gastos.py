@@ -3,10 +3,10 @@ import os
 import json
 import logging
 import boto3
+import csv
 from datetime import datetime, timedelta
 from boto3.dynamodb.conditions import Key
-from io import BytesIO
-import pandas as pd
+from io import StringIO
 from utils import (
     success_response,
     error_response,
@@ -97,7 +97,7 @@ def handler(event, context):
         codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
-        # CONSTRUIR DATOS EXCEL
+        # CONSTRUIR DATOS CSV
         # =================================================================
         
         datos_gastos = []
@@ -141,79 +141,90 @@ def handler(event, context):
                 datos_mensuales[mes]['Cantidad'] += 1
                 datos_mensuales[mes]['Total'] += monto
         
+        # Ordenar gastos por fecha (más recientes primero)
+        datos_gastos.sort(key=lambda x: x['Fecha'], reverse=True)
+        
+        # Mayor gasto
+        mayor_gasto = max([float(g.get('monto', 0)) for g in gastos]) if gastos else 0
+        
         # =================================================================
-        # CREAR EXCEL CON PANDAS
+        # CREAR CSV
         # =================================================================
         
-        # DataFrames
-        df_gastos = pd.DataFrame(datos_gastos)
-        df_gastos = df_gastos.sort_values('Fecha', ascending=False)  # Más recientes primero
+        csv_buffer = StringIO()
         
-        df_categorias = pd.DataFrame([
-            {
-                'Categoría': cat, 
-                'Cantidad Gastos': data['Cantidad'], 
-                'Total Monto': data['Total'],
-                'Porcentaje': (data['Total'] / total_egresos * 100) if total_egresos > 0 else 0
-            }
-            for cat, data in datos_categorias.items()
-        ])
-        df_categorias = df_categorias.sort_values('Total Monto', ascending=False)
+        # Sección de encabezado
+        csv_buffer.write("REPORTE DE GASTOS\n")
+        csv_buffer.write(f"Código Reporte: {codigo_reporte}\n")
+        csv_buffer.write(f"Tienda: {tenant_id}\n")
+        csv_buffer.write(f"Período: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
+        csv_buffer.write(f"Generado por: {codigo_usuario}\n")
+        csv_buffer.write(f"Fecha: {fecha_actual[:19]}\n")
+        csv_buffer.write("\n")
         
-        df_mensuales = pd.DataFrame([
-            {'Mes': mes, 'Cantidad Gastos': data['Cantidad'], 'Total Monto': data['Total']}
-            for mes, data in sorted(datos_mensuales.items())
-        ])
+        # Sección de resumen
+        csv_buffer.write("RESUMEN\n")
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['Métrica', 'Valor'])
+        writer.writerow(['Total Gastos', total_gastos])
+        writer.writerow(['Total Egresos', f"S/ {total_egresos:.2f}"])
+        writer.writerow(['Promedio por Gasto', f"S/ {total_egresos/total_gastos:.2f}" if total_gastos > 0 else 'S/ 0.00'])
+        writer.writerow(['Categorías Únicas', len(datos_categorias)])
+        writer.writerow(['Mayor Gasto', f"S/ {mayor_gasto:.2f}"])
+        csv_buffer.write("\n")
         
-        df_resumen = pd.DataFrame([
-            {'Métrica': 'Período', 'Valor': f"{fecha_inicio.strftime('%Y-%m-%d')} - {fecha_fin.strftime('%Y-%m-%d')}"},
-            {'Métrica': 'Total Gastos', 'Valor': total_gastos},
-            {'Métrica': 'Total Egresos', 'Valor': f"S/ {total_egresos:.2f}"},
-            {'Métrica': 'Promedio por Gasto', 'Valor': f"S/ {total_egresos/total_gastos:.2f}" if total_gastos > 0 else 'S/ 0.00'},
-            {'Métrica': 'Categorías Únicas', 'Valor': len(datos_categorias)},
-            {'Métrica': 'Mayor Gasto', 'Valor': f"S/ {max([float(g.get('monto', 0)) for g in gastos]):.2f}" if gastos else 'S/ 0.00'},
-            {'Métrica': 'Fecha Generación', 'Valor': fecha_actual[:19]}
-        ])
+        # Sección de gastos detallados
+        csv_buffer.write("DETALLE DE GASTOS\n")
+        writer.writerow(['Código Gasto', 'Fecha', 'Descripción', 'Categoría', 'Monto', 'Registrado Por', 'Estado', 'Fecha Registro'])
+        for gasto in datos_gastos:
+            writer.writerow([
+                gasto['Código Gasto'],
+                gasto['Fecha'],
+                gasto['Descripción'],
+                gasto['Categoría'],
+                f"{gasto['Monto']:.2f}",
+                gasto['Registrado Por'],
+                gasto['Estado'],
+                gasto['Fecha Registro']
+            ])
+        csv_buffer.write("\n")
+        
+        # Sección de gastos por categoría
+        csv_buffer.write("GASTOS POR CATEGORÍA\n")
+        writer.writerow(['Categoría', 'Cantidad Gastos', 'Total Monto', 'Porcentaje'])
+        categorias_sorted = sorted(datos_categorias.items(), key=lambda x: x[1]['Total'], reverse=True)
+        for categoria, data in categorias_sorted:
+            porcentaje = (data['Total'] / total_egresos * 100) if total_egresos > 0 else 0
+            writer.writerow([
+                categoria,
+                data['Cantidad'],
+                f"{data['Total']:.2f}",
+                f"{porcentaje:.2f}%"
+            ])
+        csv_buffer.write("\n")
+        
+        # Sección de gastos mensuales
+        csv_buffer.write("GASTOS POR MES\n")
+        writer.writerow(['Mes', 'Cantidad Gastos', 'Total Monto'])
+        for mes, data in sorted(datos_mensuales.items()):
+            writer.writerow([mes, data['Cantidad'], f"{data['Total']:.2f}"])
+        
+        csv_content = csv_buffer.getvalue()
         
         # =================================================================
         # GUARDAR EN S3
         # =================================================================
         
-        excel_buffer = BytesIO()
-        
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            # Hojas del reporte
-            df_gastos.to_excel(writer, sheet_name='Gastos', index=False)
-            df_categorias.to_excel(writer, sheet_name='Por Categoría', index=False)
-            df_mensuales.to_excel(writer, sheet_name='Por Mes', index=False)
-            df_resumen.to_excel(writer, sheet_name='Resumen', index=False)
-            
-            # Formatear columnas
-            for sheet_name in writer.sheets:
-                worksheet = writer.sheets[sheet_name]
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 50)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
-        
-        excel_buffer.seek(0)
-        
         # Subir a S3
         fecha_str = fecha_actual[:10].replace('-', '') + '_' + fecha_actual[11:19].replace(':', '')
-        s3_key = f"{tenant_id}/reportes/gastos_{codigo_reporte}_{fecha_str}.xlsx"
+        s3_key = f"{tenant_id}/reportes/gastos_{codigo_reporte}_{fecha_str}.csv"
         
         s3_client.put_object(
             Bucket=S3_BUCKET,
             Key=s3_key,
-            Body=excel_buffer.getvalue(),
-            ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            Body=csv_content.encode('utf-8'),
+            ContentType='text/csv',
+            ContentDisposition=f'attachment; filename="gastos_{codigo_reporte}.csv"'
         )
         
         logger.info(f"📁 Archivo guardado en S3: {s3_key}")
@@ -235,6 +246,7 @@ def handler(event, context):
         reporte_data = {
             "codigo_reporte": codigo_reporte,
             "tipo": "gastos",
+            "formato": "CSV",
             "fecha_generacion": fecha_actual,
             "parametros": {
                 "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
@@ -244,7 +256,7 @@ def handler(event, context):
             },
             "s3_bucket": S3_BUCKET,
             "s3_key": s3_key,
-            "tamaño_bytes": len(excel_buffer.getvalue()),
+            "tamaño_bytes": len(csv_content.encode('utf-8')),
             "generado_por": codigo_usuario,
             "estado": "COMPLETADO",
             "created_at": fecha_actual

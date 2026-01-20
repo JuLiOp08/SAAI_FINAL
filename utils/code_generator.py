@@ -145,20 +145,34 @@ def generar_codigo_gasto(codigo_tienda):
         numero = random.randint(1, 999)
         return f"{codigo_tienda}G{numero:03d}"
 
-def generar_codigo_reporte(codigo_tienda, tipo_reporte):
+def generar_codigo_reporte(codigo_tienda):
     """
-    Genera un código único para reporte en formato {codigo_tienda}R{tipo}{timestamp}
-    Ejemplos: T001RINV20250115143022, T002RVEN20250115143022
+    Genera un código único para reporte en formato {codigo_tienda}R###
+    Ejemplos: T001R001, T002R015
     
     Args:
         codigo_tienda (str): Código de la tienda
-        tipo_reporte (str): Tipo de reporte (INV, VEN, GAS, GEN)
         
     Returns:
         str: Código de reporte generado
     """
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    return f"{codigo_tienda}R{tipo_reporte}{timestamp}"
+    from .dynamodb_utils import increment_counter
+    import os
+    
+    try:
+        counters_table = os.environ.get('COUNTERS_TABLE')
+        if counters_table:
+            siguiente_numero = increment_counter(counters_table, codigo_tienda, 'REPORTES')
+            if siguiente_numero:
+                return f"{codigo_tienda}R{siguiente_numero:03d}"
+        
+        # Fallback
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}R{numero:03d}"
+        
+    except Exception as e:
+        numero = random.randint(1, 999)
+        return f"{codigo_tienda}R{numero:03d}"
 
 def generar_codigo_notificacion(codigo_tienda):
     """

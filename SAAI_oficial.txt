@@ -1216,9 +1216,12 @@ Request:
 Response:
 {
   "success": true,
+  "mensaje": "Reporte de inventario generado exitosamente",
   "data": {
     "codigo_reporte": "T002R001",
-    "download_url": "https://s3.amazonaws.com/.../inventario.xlsx"
+    "download_url": "https://s3.amazonaws.com/.../inventario.csv",
+    "formato": "CSV",
+    "total_productos": 150
   }
 }
 
@@ -1228,15 +1231,49 @@ Lambda: GenerarReporteVentas
 Método: POST
 Path: /reportes/ventas
 
+Request:
+{
+  "body": {
+    "fecha_inicio": "2025-01-01",
+    "fecha_fin": "2025-01-07"
+  }
+}
+
+Response: (igual que inventario, archivo ventas.csv)
+
+------------------------------------
+
 Lambda: GenerarReporteGastos
 Método: POST
 Path: /reportes/gastos
+
+Request:
+{
+  "body": {
+    "fecha_inicio": "2025-01-01",
+    "fecha_fin": "2025-01-07"
+  }
+}
+
+Response: (igual que inventario, archivo gastos.csv)
+
+------------------------------------
 
 Lambda: GenerarReporteGeneral
 Método: POST
 Path: /reportes/general
 
-(Mismo formato de request/response que inventario)
+Request:
+{
+  "body": {
+    "fecha_inicio": "2025-01-01",
+    "fecha_fin": "2025-01-07"
+  }
+}
+
+Response: (igual que inventario, archivo general.csv)
+
+NOTA: Los 4 reportes generan archivos CSV (no Excel) para mayor compatibilidad y rendimiento en Lambda.
 
 ------------------------------------
 

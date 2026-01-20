@@ -3,10 +3,10 @@ import os
 import json
 import logging
 import boto3
+import csv
 from datetime import datetime, timedelta
 from boto3.dynamodb.conditions import Key
-from io import BytesIO
-import pandas as pd
+from io import StringIO
 from utils import (
     success_response,
     error_response,
@@ -98,7 +98,7 @@ def handler(event, context):
         codigo_reporte = f"{tenant_id}R{contador:03d}"
         
         # =================================================================
-        # CONSTRUIR DATOS EXCEL
+        # CONSTRUIR DATOS CSV
         # =================================================================
         
         datos_ventas = []
@@ -114,7 +114,7 @@ def handler(event, context):
             # Datos de venta individual
             datos_ventas.append({
                 'Código Venta': venta.get('codigo_venta', ''),
-                'Fecha': venta.get('fecha', ''),  # Ya es solo fecha YYYY-MM-DD
+                'Fecha': venta.get('fecha', ''),
                 'Cliente': venta.get('cliente', ''),
                 'Total': total_venta,
                 'Método Pago': venta.get('metodo_pago', ''),
@@ -153,69 +153,83 @@ def handler(event, context):
             datos_metodos_pago[metodo]['Total'] += total_venta
         
         # =================================================================
-        # CREAR EXCEL CON PANDAS
+        # CREAR CSV
         # =================================================================
         
-        # DataFrames
-        df_ventas = pd.DataFrame(datos_ventas)
+        csv_buffer = StringIO()
         
-        df_productos = pd.DataFrame(list(datos_productos_vendidos.values()))
-        if not df_productos.empty:
-            df_productos = df_productos.sort_values('Cantidad Total', ascending=False)
+        # Sección de encabezado
+        csv_buffer.write("REPORTE DE VENTAS\n")
+        csv_buffer.write(f"Código Reporte: {codigo_reporte}\n")
+        csv_buffer.write(f"Tienda: {tenant_id}\n")
+        csv_buffer.write(f"Período: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
+        csv_buffer.write(f"Generado por: {codigo_usuario}\n")
+        csv_buffer.write(f"Fecha: {fecha_actual[:19]}\n")
+        csv_buffer.write("\n")
         
-        df_metodos_pago = pd.DataFrame([
-            {'Método Pago': metodo, 'Cantidad Ventas': data['Cantidad'], 'Total Ingresos': data['Total']}
-            for metodo, data in datos_metodos_pago.items()
-        ])
+        # Sección de resumen
+        csv_buffer.write("RESUMEN\n")
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['Métrica', 'Valor'])
+        writer.writerow(['Total Ventas', total_ventas])
+        writer.writerow(['Total Ingresos', f"S/ {total_ingresos:.2f}"])
+        writer.writerow(['Promedio por Venta', f"S/ {total_ingresos/total_ventas:.2f}" if total_ventas > 0 else 'S/ 0.00'])
+        writer.writerow(['Productos Únicos', len(datos_productos_vendidos)])
+        csv_buffer.write("\n")
         
-        df_resumen = pd.DataFrame([
-            {'Métrica': 'Período', 'Valor': f"{fecha_inicio.strftime('%Y-%m-%d')} - {fecha_fin.strftime('%Y-%m-%d')}"},
-            {'Métrica': 'Total Ventas', 'Valor': total_ventas},
-            {'Métrica': 'Total Ingresos', 'Valor': f"S/ {total_ingresos:.2f}"},
-            {'Métrica': 'Promedio por Venta', 'Valor': f"S/ {total_ingresos/total_ventas:.2f}" if total_ventas > 0 else 'S/ 0.00'},
-            {'Métrica': 'Productos Únicos', 'Valor': len(datos_productos_vendidos)},
-            {'Métrica': 'Fecha Generación', 'Valor': fecha_actual[:19]}  # YYYY-MM-DDTHH:mm:ss
-        ])
+        # Sección de ventas detalladas
+        csv_buffer.write("DETALLE DE VENTAS\n")
+        writer.writerow(['Código Venta', 'Fecha', 'Cliente', 'Total', 'Método Pago', 'Cantidad Items', 'Vendedor', 'Estado', 'Fecha Registro'])
+        for venta in datos_ventas:
+            writer.writerow([
+                venta['Código Venta'],
+                venta['Fecha'],
+                venta['Cliente'],
+                f"{venta['Total']:.2f}",
+                venta['Método Pago'],
+                venta['Cantidad Items'],
+                venta['Vendedor'],
+                venta['Estado'],
+                venta['Fecha Registro']
+            ])
+        csv_buffer.write("\n")
+        
+        # Sección de productos vendidos
+        csv_buffer.write("PRODUCTOS VENDIDOS\n")
+        writer.writerow(['Código Producto', 'Nombre Producto', 'Cantidad Total', 'Ingresos Total', 'Precio Promedio'])
+        productos_sorted = sorted(datos_productos_vendidos.values(), key=lambda x: x['Cantidad Total'], reverse=True)
+        for producto in productos_sorted:
+            writer.writerow([
+                producto['Código Producto'],
+                producto['Nombre Producto'],
+                producto['Cantidad Total'],
+                f"{producto['Ingresos Total']:.2f}",
+                f"{producto['Precio Promedio']:.2f}"
+            ])
+        csv_buffer.write("\n")
+        
+        # Sección de métodos de pago
+        csv_buffer.write("MÉTODOS DE PAGO\n")
+        writer.writerow(['Método Pago', 'Cantidad Ventas', 'Total Ingresos'])
+        for metodo, data in datos_metodos_pago.items():
+            writer.writerow([metodo, data['Cantidad'], f"{data['Total']:.2f}"])
+        
+        csv_content = csv_buffer.getvalue()
         
         # =================================================================
         # GUARDAR EN S3
         # =================================================================
         
-        excel_buffer = BytesIO()
-        
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            # Hojas del reporte
-            df_ventas.to_excel(writer, sheet_name='Ventas', index=False)
-            df_productos.to_excel(writer, sheet_name='Productos Vendidos', index=False)
-            df_metodos_pago.to_excel(writer, sheet_name='Métodos Pago', index=False)
-            df_resumen.to_excel(writer, sheet_name='Resumen', index=False)
-            
-            # Formatear columnas
-            for sheet_name in writer.sheets:
-                worksheet = writer.sheets[sheet_name]
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 50)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
-        
-        excel_buffer.seek(0)
-        
         # Subir a S3
         fecha_str = fecha_actual[:10].replace('-', '') + '_' + fecha_actual[11:19].replace(':', '')
-        s3_key = f"{tenant_id}/reportes/ventas_{codigo_reporte}_{fecha_str}.xlsx"
+        s3_key = f"{tenant_id}/reportes/ventas_{codigo_reporte}_{fecha_str}.csv"
         
         s3_client.put_object(
             Bucket=S3_BUCKET,
             Key=s3_key,
-            Body=excel_buffer.getvalue(),
-            ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            Body=csv_content.encode('utf-8'),
+            ContentType='text/csv',
+            ContentDisposition=f'attachment; filename="ventas_{codigo_reporte}.csv"'
         )
         
         logger.info(f"📁 Archivo guardado en S3: {s3_key}")
@@ -237,6 +251,7 @@ def handler(event, context):
         reporte_data = {
             "codigo_reporte": codigo_reporte,
             "tipo": "ventas",
+            "formato": "CSV",
             "fecha_generacion": fecha_actual,
             "parametros": {
                 "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
@@ -246,7 +261,7 @@ def handler(event, context):
             },
             "s3_bucket": S3_BUCKET,
             "s3_key": s3_key,
-            "tamaño_bytes": len(excel_buffer.getvalue()),
+            "tamaño_bytes": len(csv_content.encode('utf-8')),
             "generado_por": codigo_usuario,
             "estado": "COMPLETADO",
             "created_at": fecha_actual

@@ -3,9 +3,9 @@ import os
 import json
 import logging
 import boto3
+import csv
 from datetime import datetime, timedelta
-from io import BytesIO
-import pandas as pd
+from io import StringIO
 from utils import (
     success_response,
     error_response,
@@ -136,144 +136,149 @@ def handler(event, context):
         productos_bajo_stock = len([p for p in productos if 0 < int(p.get('stock', 0)) <= 5])
         
         # =================================================================
-        # CONSTRUIR DASHBOARD EJECUTIVO
+        # CREAR CSV CON TODAS LAS SECCIONES
         # =================================================================
         
-        df_dashboard = pd.DataFrame([
-            {'Métrica': 'PERÍODO ANALIZADO', 'Valor': f"{fecha_inicio.strftime('%Y-%m-%d')} - {fecha_fin.strftime('%Y-%m-%d')}"},
-            {'Métrica': '', 'Valor': ''},
-            {'Métrica': 'RESUMEN FINANCIERO', 'Valor': ''},
-            {'Métrica': 'Total Ingresos (Ventas)', 'Valor': f"S/ {total_ingresos:.2f}"},
-            {'Métrica': 'Total Egresos (Gastos)', 'Valor': f"S/ {total_egresos:.2f}"},
-            {'Métrica': 'Balance Neto', 'Valor': f"S/ {balance:.2f}"},
-            {'Métrica': 'Valor Inventario Actual', 'Valor': f"S/ {valor_inventario:.2f}"},
-            {'Métrica': '', 'Valor': ''},
-            {'Métrica': 'INDICADORES OPERATIVOS', 'Valor': ''},
-            {'Métrica': 'Total Productos', 'Valor': len(productos)},
-            {'Métrica': 'Productos Sin Stock', 'Valor': productos_sin_stock},
-            {'Métrica': 'Productos Bajo Stock (≤5)', 'Valor': productos_bajo_stock},
-            {'Métrica': 'Total Ventas', 'Valor': len(ventas)},
-            {'Métrica': 'Promedio por Venta', 'Valor': f"S/ {total_ingresos/len(ventas):.2f}" if ventas else 'S/ 0.00'},
-            {'Métrica': 'Total Gastos', 'Valor': len(gastos)},
-            {'Métrica': 'Promedio por Gasto', 'Valor': f"S/ {total_egresos/len(gastos):.2f}" if gastos else 'S/ 0.00'},
-            {'Métrica': '', 'Valor': ''},
-            {'Métrica': 'FECHA GENERACIÓN', 'Valor': fecha_actual[:19]}
-        ])
+        csv_buffer = StringIO()
+        
+        # Sección de encabezado principal
+        csv_buffer.write("REPORTE GENERAL\n")
+        csv_buffer.write(f"Código Reporte: {codigo_reporte}\n")
+        csv_buffer.write(f"Tienda: {tenant_id}\n")
+        csv_buffer.write(f"Período: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}\n")
+        csv_buffer.write(f"Generado por: {codigo_usuario}\n")
+        csv_buffer.write(f"Fecha: {fecha_actual[:19]}\n")
+        csv_buffer.write("\n")
         
         # =================================================================
-        # CONSTRUIR DETALLE DE INVENTARIO
+        # SECCIÓN 1: DASHBOARD EJECUTIVO
         # =================================================================
         
-        datos_inventario = []
-        for producto in productos:
-            stock = int(producto.get('stock', 0))
-            precio = float(producto.get('precio', 0))
-            valor_total = stock * precio
-            
-            if stock == 0:
-                estado_stock = "SIN STOCK"
-            elif stock <= 5:
-                estado_stock = "BAJO STOCK"
-            else:
-                estado_stock = "NORMAL"
-            
-            datos_inventario.append({
-                'Código': producto.get('codigo_producto', ''),
-                'Nombre': producto.get('nombre', ''),
-                'Categoría': producto.get('categoria', ''),
-                'Precio': precio,
-                'Stock': stock,
-                'Estado Stock': estado_stock,
-                'Valor Total': valor_total
-            })
+        csv_buffer.write("="*60 + "\n")
+        csv_buffer.write("DASHBOARD EJECUTIVO\n")
+        csv_buffer.write("="*60 + "\n")
+        csv_buffer.write("\n")
         
-        df_inventario = pd.DataFrame(datos_inventario) if datos_inventario else pd.DataFrame()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['Métrica', 'Valor'])
+        writer.writerow(['RESUMEN FINANCIERO', ''])
+        writer.writerow(['Total Ingresos (Ventas)', f"S/ {total_ingresos:.2f}"])
+        writer.writerow(['Total Egresos (Gastos)', f"S/ {total_egresos:.2f}"])
+        writer.writerow(['Balance Neto', f"S/ {balance:.2f}"])
+        writer.writerow(['Valor Inventario Actual', f"S/ {valor_inventario:.2f}"])
+        writer.writerow(['', ''])
+        writer.writerow(['INDICADORES OPERATIVOS', ''])
+        writer.writerow(['Total Productos', len(productos)])
+        writer.writerow(['Productos Sin Stock', productos_sin_stock])
+        writer.writerow(['Productos Bajo Stock (≤5)', productos_bajo_stock])
+        writer.writerow(['Total Ventas', len(ventas)])
+        writer.writerow(['Promedio por Venta', f"S/ {total_ingresos/len(ventas):.2f}" if ventas else 'S/ 0.00'])
+        writer.writerow(['Total Gastos', len(gastos)])
+        writer.writerow(['Promedio por Gasto', f"S/ {total_egresos/len(gastos):.2f}" if gastos else 'S/ 0.00'])
+        csv_buffer.write("\n\n")
         
         # =================================================================
-        # CONSTRUIR DETALLE DE VENTAS
+        # SECCIÓN 2: DETALLE DE INVENTARIO
         # =================================================================
         
-        datos_ventas = []
-        for venta in ventas:
-            datos_ventas.append({
-                'Código Venta': venta.get('codigo_venta', ''),
-                'Fecha': venta.get('fecha', ''),
-                'Cliente': venta.get('cliente', ''),
-                'Total': float(venta.get('total', 0)),
-                'Método Pago': venta.get('metodo_pago', ''),
-                'Vendedor': venta.get('codigo_usuario', '')
-            })
+        csv_buffer.write("="*60 + "\n")
+        csv_buffer.write("INVENTARIO ACTUAL\n")
+        csv_buffer.write("="*60 + "\n")
+        csv_buffer.write("\n")
         
-        df_ventas = pd.DataFrame(datos_ventas) if datos_ventas else pd.DataFrame()
+        if productos:
+            writer.writerow(['Código', 'Nombre', 'Categoría', 'Precio', 'Stock', 'Estado Stock', 'Valor Total'])
+            for producto in productos:
+                stock = int(producto.get('stock', 0))
+                precio = float(producto.get('precio', 0))
+                valor_total = stock * precio
+                
+                if stock == 0:
+                    estado_stock = "SIN STOCK"
+                elif stock <= 5:
+                    estado_stock = "BAJO STOCK"
+                else:
+                    estado_stock = "NORMAL"
+                
+                writer.writerow([
+                    producto.get('codigo_producto', ''),
+                    producto.get('nombre', ''),
+                    producto.get('categoria', ''),
+                    f"{precio:.2f}",
+                    stock,
+                    estado_stock,
+                    f"{valor_total:.2f}"
+                ])
+        else:
+            writer.writerow(['No hay productos en el inventario'])
+        
+        csv_buffer.write("\n\n")
         
         # =================================================================
-        # CONSTRUIR DETALLE DE GASTOS
+        # SECCIÓN 3: DETALLE DE VENTAS
         # =================================================================
         
-        datos_gastos = []
-        for gasto in gastos:
-            datos_gastos.append({
-                'Código Gasto': gasto.get('codigo_gasto', ''),
-                'Fecha': gasto.get('fecha', ''),
-                'Descripción': gasto.get('descripcion', ''),
-                'Categoría': gasto.get('categoria', ''),
-                'Monto': float(gasto.get('monto', 0)),
-                'Registrado Por': gasto.get('created_by', '')
-            })
+        csv_buffer.write("="*60 + "\n")
+        csv_buffer.write("VENTAS DEL PERÍODO\n")
+        csv_buffer.write("="*60 + "\n")
+        csv_buffer.write("\n")
         
-        df_gastos = pd.DataFrame(datos_gastos) if datos_gastos else pd.DataFrame()
+        if ventas:
+            writer.writerow(['Código Venta', 'Fecha', 'Cliente', 'Total', 'Método Pago', 'Vendedor'])
+            for venta in ventas:
+                writer.writerow([
+                    venta.get('codigo_venta', ''),
+                    venta.get('fecha', ''),
+                    venta.get('cliente', ''),
+                    f"{float(venta.get('total', 0)):.2f}",
+                    venta.get('metodo_pago', ''),
+                    venta.get('codigo_usuario', '')
+                ])
+        else:
+            writer.writerow(['No hay ventas en el período seleccionado'])
+        
+        csv_buffer.write("\n\n")
         
         # =================================================================
-        # CREAR EXCEL CON PANDAS
+        # SECCIÓN 4: DETALLE DE GASTOS
         # =================================================================
         
-        excel_buffer = BytesIO()
+        csv_buffer.write("="*60 + "\n")
+        csv_buffer.write("GASTOS DEL PERÍODO\n")
+        csv_buffer.write("="*60 + "\n")
+        csv_buffer.write("\n")
         
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            # Hoja 1: Dashboard Ejecutivo
-            df_dashboard.to_excel(writer, sheet_name='Dashboard', index=False)
-            
-            # Hoja 2: Inventario (si hay datos)
-            if not df_inventario.empty:
-                df_inventario.to_excel(writer, sheet_name='Inventario', index=False)
-            
-            # Hoja 3: Ventas (si hay datos)
-            if not df_ventas.empty:
-                df_ventas.to_excel(writer, sheet_name='Ventas', index=False)
-            
-            # Hoja 4: Gastos (si hay datos)
-            if not df_gastos.empty:
-                df_gastos.to_excel(writer, sheet_name='Gastos', index=False)
-            
-            # Formatear columnas en todas las hojas
-            for sheet_name in writer.sheets:
-                worksheet = writer.sheets[sheet_name]
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 50)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
+        if gastos:
+            writer.writerow(['Código Gasto', 'Fecha', 'Descripción', 'Categoría', 'Monto', 'Registrado Por'])
+            for gasto in gastos:
+                writer.writerow([
+                    gasto.get('codigo_gasto', ''),
+                    gasto.get('fecha', ''),
+                    gasto.get('descripcion', ''),
+                    gasto.get('categoria', ''),
+                    f"{float(gasto.get('monto', 0)):.2f}",
+                    gasto.get('created_by', '')
+                ])
+        else:
+            writer.writerow(['No hay gastos en el período seleccionado'])
         
-        excel_buffer.seek(0)
+        csv_buffer.write("\n")
+        
+        csv_content = csv_buffer.getvalue()
         
         # =================================================================
         # GUARDAR EN S3
         # =================================================================
         
         fecha_str = fecha_actual[:10].replace('-', '') + '_' + fecha_actual[11:19].replace(':', '')
-        s3_key = f"{tenant_id}/reportes/general_{codigo_reporte}_{fecha_str}.xlsx"
+        s3_key = f"{tenant_id}/reportes/general_{codigo_reporte}_{fecha_str}.csv"
         
         s3_client.put_object(
             Bucket=S3_BUCKET,
             Key=s3_key,
-            Body=excel_buffer.getvalue(),
-            ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            Body=csv_content.encode('utf-8'),
+            ContentType='text/csv',
+            ContentDisposition=f'attachment; filename="general_{codigo_reporte}.csv"'
         )
         
         logger.info(f"📁 Archivo guardado en S3: {s3_key}")
@@ -295,6 +300,7 @@ def handler(event, context):
         reporte_data = {
             "codigo_reporte": codigo_reporte,
             "tipo": "general",
+            "formato": "CSV",
             "fecha_generacion": fecha_actual,
             "parametros": {
                 "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
@@ -305,7 +311,7 @@ def handler(event, context):
             },
             "s3_bucket": S3_BUCKET,
             "s3_key": s3_key,
-            "tamaño_bytes": len(excel_buffer.getvalue()),
+            "tamaño_bytes": len(csv_content.encode('utf-8')),
             "generado_por": codigo_usuario,
             "estado": "COMPLETADO",
             "created_at": fecha_actual

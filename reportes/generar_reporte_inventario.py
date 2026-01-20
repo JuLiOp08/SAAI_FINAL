@@ -3,10 +3,8 @@ import os
 import json
 import logging
 import boto3
-from datetime import datetime
-from boto3.dynamodb.conditions import Key
-from io import BytesIO
-import pandas as pd
+import csv
+from io import StringIO
 from utils import (
     success_response,
     error_response,
@@ -110,67 +108,76 @@ def handler(event, context):
                 'Stock Actual': stock,
                 'Estado Stock': estado_stock,
                 'Valor Total': valor_total,
-                'Fecha Creación': producto.get('created_at', '')[:10],  # Solo fecha
-                'Creado Por': producto.get('created_by', '')
+                'Fecha Creación': producto.get('created_at', '')[:10]
             })
         
         # =================================================================
-        # CREAR EXCEL CON PANDAS
+        # GENERAR CSV
         # =================================================================
         
-        # DataFrame principal
-        df_productos = pd.DataFrame(datos_excel)
+        csv_buffer = StringIO()
+        csv_writer = csv.writer(csv_buffer)
         
-        # DataFrame resumen
-        df_resumen = pd.DataFrame([
-            {'Métrica': 'Total Productos', 'Valor': total_productos},
-            {'Métrica': 'Productos Sin Stock', 'Valor': productos_sin_stock},
-            {'Métrica': 'Productos Bajo Stock', 'Valor': productos_bajo_stock},
-            {'Métrica': 'Valor Total Inventario', 'Valor': f"S/ {total_valor:.2f}"},
-            {'Métrica': 'Fecha Generación', 'Valor': fecha_actual[:19]}  # YYYY-MM-DDTHH:mm:ss
+        # Encabezado resumen
+        csv_writer.writerow(['REPORTE DE INVENTARIO'])
+        csv_writer.writerow(['Código Reporte:', codigo_reporte])
+        csv_writer.writerow(['Tienda:', tenant_id])
+        csv_writer.writerow(['Generado por:', codigo_usuario])
+        csv_writer.writerow(['Fecha:', fecha_actual])
+        csv_writer.writerow([])  # Línea vacía
+        
+        # Encabezados de productos
+        csv_writer.writerow([
+            'Código Producto',
+            'Nombre',
+            'Categoría',
+            'Descripción',
+            'Precio Unitario',
+            'Stock Actual',
+            'Estado Stock',
+            'Valor Total',
+            'Fecha Creación'
         ])
+        
+        # Datos de productos
+        for dato in datos_excel:
+            csv_writer.writerow([
+                dato['Código Producto'],
+                dato['Nombre'],
+                dato['Categoría'],
+                dato['Descripción'],
+                f"{dato['Precio Unitario']:.2f}",
+                dato['Stock Actual'],
+                dato['Estado Stock'],
+                f"{dato['Valor Total']:.2f}",
+                dato['Fecha Creación']
+            ])
+        
+        # Resumen al final
+        csv_writer.writerow([])
+        csv_writer.writerow(['RESUMEN'])
+        csv_writer.writerow(['Total Productos:', total_productos])
+        csv_writer.writerow(['Productos Sin Stock:', productos_sin_stock])
+        csv_writer.writerow(['Productos Bajo Stock:', productos_bajo_stock])
+        csv_writer.writerow(['Valor Total Inventario:', f"S/ {total_valor:.2f}"])
         
         # =================================================================
         # GUARDAR EN S3
         # =================================================================
         
-        excel_buffer = BytesIO()
+        csv_content = csv_buffer.getvalue()
+        csv_buffer.close()
         
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            # Hoja de productos
-            df_productos.to_excel(writer, sheet_name='Inventario', index=False)
-            
-            # Hoja de resumen
-            df_resumen.to_excel(writer, sheet_name='Resumen', index=False)
-            
-            # Formatear columnas
-            workbook = writer.book
-            worksheet = writer.sheets['Inventario']
-            
-            # Ajustar ancho de columnas
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                worksheet.column_dimensions[column_letter].width = adjusted_width
-        
-        excel_buffer.seek(0)
-        
-        # Subir a S3
+        # S3 key
         fecha_str = fecha_actual[:10].replace('-', '') + '_' + fecha_actual[11:19].replace(':', '')
-        s3_key = f"{tenant_id}/reportes/inventario_{codigo_reporte}_{fecha_str}.xlsx"
+        s3_key = f"{tenant_id}/reportes/inventario_{codigo_reporte}_{fecha_str}.csv"
         
         s3_client.put_object(
             Bucket=S3_BUCKET,
             Key=s3_key,
-            Body=excel_buffer.getvalue(),
-            ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            Body=csv_content.encode('utf-8'),
+            ContentType='text/csv',
+            ContentDisposition=f'attachment; filename="inventario_{codigo_reporte}.csv"'
         )
         
         logger.info(f"📁 Archivo guardado en S3: {s3_key}")
@@ -196,14 +203,15 @@ def handler(event, context):
             "parametros": {
                 "total_productos": total_productos,
                 "productos_sin_stock": productos_sin_stock,
-                "productos_bajo_stock": productos_bajo_stock
+                "productos_bajo_stock": productos_bajo_stock,
+                "valor_total": round(total_valor, 2)
             },
             "s3_bucket": S3_BUCKET,
             "s3_key": s3_key,
-            "tamaño_bytes": len(excel_buffer.getvalue()),
+            "tamaño_bytes": len(csv_content.encode('utf-8')),
             "generado_por": codigo_usuario,
             "estado": "COMPLETADO",
-            "created_at": fecha_actual
+            "formato": "CSV"
         }
         
         put_item_standard(
@@ -215,11 +223,16 @@ def handler(event, context):
         
         logger.info(f"✅ Reporte inventario generado: {codigo_reporte}")
         
-        return success_response(data={
-            "codigo_reporte": codigo_reporte,
-            "download_url": download_url
-        })
+        return success_response(
+            mensaje="Reporte de inventario generado exitosamente",
+            data={
+                "codigo_reporte": codigo_reporte,
+                "download_url": download_url,
+                "formato": "CSV",
+                "total_productos": total_productos
+            }
+        )
         
     except Exception as e:
-        logger.error(f"Error generando reporte inventario: {str(e)}")
+        logger.error(f"Error generando reporte inventario: {str(e)}", exc_info=True)
         return error_response("Error interno del servidor", 500)
