@@ -924,7 +924,7 @@
 								"analitica"
 							]
 						},
-						"description": "Calcular métricas analíticas (ventas, gastos, ganancias, stock). Genera alertas SNS si ganancia < 50 soles o stock bajo < 5. Solo rol admin."
+						"description": "Calcular y guardar analítica para 3 periodos (dia, semana, mes). Automático vía EventBridge cada 4h. Solo rol admin."
 					},
 					"response": []
 				},
@@ -939,15 +939,22 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/analitica",
+							"raw": "{{base_url}}/analitica?periodo=semana",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"analitica"
+							],
+							"query": [
+								{
+									"key": "periodo",
+									"value": "semana",
+									"description": "Periodo: dia, semana, mes"
+								}
 							]
 						},
-						"description": "Obtener última analítica calculada. Devuelve métricas operativas. Solo rol admin."
+						"description": "Consultar analítica calculada. periodo: dia (1d), semana (7d, default), mes (30d). NO recalcula, solo consulta."
 					},
 					"response": []
 				}

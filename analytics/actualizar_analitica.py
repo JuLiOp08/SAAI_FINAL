@@ -3,11 +3,11 @@ import os
 import json
 import logging
 import boto3
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from utils import (
     success_response,
     error_response,
-    parse_request_body,
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
     obtener_fecha_hora_peru,
@@ -28,170 +28,191 @@ ALERTAS_TOPIC_ARN = os.environ.get('ALERTAS_SNS_TOPIC_ARN')
 
 def handler(event, context):
     """
-    POST /analitica
+    POST /analitica (EventBridge automático cada 4 horas)
     
-    Calcula y guarda métricas agregadas por tienda/fecha.
+    Calcula y guarda métricas agregadas para los 3 periodos: dia, semana, mes.
     Emite alertas en SNS AlertasSAAI + notificación WebSocket mínima.
     
-    NOTA: Este endpoint normalmente se ejecuta automáticamente cada 4 horas
-    mediante EventBridge, no por acción directa del usuario.
+    NOTA: Este endpoint se ejecuta principalmente desde EventBridge (sin JWT).
+    Calcula automáticamente los 3 periodos y guarda 3 registros en t_analitica.
     
-    Request: { "body": { "fecha": "2025-11-08" } }
-    Response: { "success": true, "message": "Analítica actualizada" }
+    Request EventBridge: { "tenant_id": "T001" }
+    Response: { "success": true, "mensaje": "Analítica actualizada (3 periodos)" }
     """
     try:
-        # JWT validation + tenant
-        tenant_id = extract_tenant_from_jwt_claims(event)
-        user_info = extract_user_from_jwt_claims(event)
-        codigo_usuario = user_info.get('codigo_usuario') if user_info else None
+        # Detectar si viene de EventBridge o API Gateway
+        is_eventbridge = event.get('source') == 'aws.events' or 'detail-type' in event
         
-        if not tenant_id or not codigo_usuario:
-            return error_response("Token inválido - datos faltantes", 401)
-        
-        # Parse body
-        body = parse_request_body(event)
-        fecha_param = body.get('fecha')
-        
-        # Fecha de cálculo (default: hoy)
-        lima_now = obtener_fecha_hora_peru()
-        if fecha_param:
-            try:
-                fecha_calc = datetime.strptime(fecha_param, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-            except ValueError:
-                return error_response("Formato de fecha inválido. Use YYYY-MM-DD", 400)
+        if is_eventbridge:
+            # EventBridge: tenant_id viene en el event
+            tenant_id = event.get('tenant_id') or event.get('detail', {}).get('tenant_id')
+            codigo_usuario = 'SYSTEM_EVENTBRIDGE'
+            
+            if not tenant_id:
+                logger.error("EventBridge sin tenant_id")
+                return error_response("EventBridge sin tenant_id", 400)
         else:
-            fecha_calc = datetime.now(timezone.utc)
+            # API Gateway: extraer de JWT
+            tenant_id = extract_tenant_from_jwt_claims(event)
+            user_info = extract_user_from_jwt_claims(event)
+            codigo_usuario = user_info.get('codigo_usuario') if user_info else None
+            
+            if not tenant_id or not codigo_usuario:
+                return error_response("Token inválido - datos faltantes", 401)
         
+        # Fecha de cálculo (hoy)
+        fecha_calc = datetime.now(timezone.utc)
         fecha_str = fecha_calc.strftime('%Y-%m-%d')
         
-        logger.info(f"🧮 Calculando analítica para tienda {tenant_id}, fecha {fecha_str}")
+        logger.info(f"🧮 Calculando analítica para tienda {tenant_id}, fecha {fecha_str} (3 periodos)")
         
-        # Período de análisis: últimos 7 días hasta fecha_calc
-        fecha_fin = fecha_calc
-        fecha_inicio = fecha_calc - timedelta(days=6)
+        # Calcular y guardar los 3 periodos
+        periodos = [
+            {'nombre': 'dia', 'dias': 1},
+            {'nombre': 'semana', 'dias': 7},
+            {'nombre': 'mes', 'dias': 30}
+        ]
+        
+        resultados_guardados = 0
+        alertas_semana = []
+        
+        for periodo_info in periodos:
+            periodo_nombre = periodo_info['nombre']
+            dias_periodo = periodo_info['dias']
+            
+            logger.info(f"  📊 Procesando periodo '{periodo_nombre}' ({dias_periodo} días)")
+            
+            # Período de análisis
+            fecha_fin = fecha_calc
+            if dias_periodo == 1:
+                fecha_inicio = fecha_calc
+            else:
+                fecha_inicio = fecha_calc - timedelta(days=dias_periodo - 1)
+        
+            # =================================================================
+            # CÁLCULOS DE ANALÍTICA
+            # =================================================================
+            
+            # 1. VENTAS del período
+            ventas_periodo = calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin)
+            
+            # 2. GASTOS del período
+            gastos_periodo = calcular_gastos_periodo(tenant_id, fecha_inicio, fecha_fin)
+            
+            # 3. Calcular BALANCE (ingresos - egresos)
+            balance = ventas_periodo['total_ingresos'] - gastos_periodo['total_egresos']
+            gastos_periodo['balance'] = round(balance, 2)
+            
+            # 4. INVENTARIO actual (solo para dia y semana, no mes para optimizar)
+            if periodo_nombre in ['dia', 'semana']:
+                inventario_actual = calcular_inventario_actual(tenant_id)
+            else:
+                inventario_actual = {"total_productos": 0, "productos_sin_stock": 0, "productos_bajo_stock": 0, "valor_total": 0.0}
+            
+            # 5. USUARIOS de la tienda (solo para semana, no repetir)
+            if periodo_nombre == 'semana':
+                usuarios_tienda = calcular_usuarios_tienda(tenant_id)
+            else:
+                usuarios_tienda = {"administradores": 0, "trabajadores": 0}
+            
+            # 6. PRODUCTOS TOP (más vendidos del período)
+            productos_top = calcular_productos_top(tenant_id, fecha_inicio, fecha_fin)
+            
+            # 7. VENTAS DIARIAS del período
+            ventas_diarias = calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin)
+            
+            # Construir resultado analítico (convertir floats a Decimal)
+            analitica_data = {
+                "periodo": {
+                    "tipo": periodo_nombre,
+                    "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
+                    "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
+                    "dias": dias_periodo
+                },
+                "ventas": convert_floats_to_decimal(ventas_periodo),
+                "gastos": convert_floats_to_decimal(gastos_periodo),
+                "inventario": convert_floats_to_decimal(inventario_actual),
+                "usuarios": usuarios_tienda,
+                "productos_top": productos_top,
+                "ventas_diarias": [convert_floats_to_decimal(v) for v in ventas_diarias],
+                "alertas_detectadas": [],
+                "updated_at": obtener_fecha_hora_peru()
+            }
+            
+            # =================================================================
+            # DETECCIÓN DE ALERTAS (solo para periodo 'semana')
+            # =================================================================
+            if periodo_nombre == 'semana':
+                # Alerta: Total ventas = 0
+                if ventas_periodo['total_ventas'] == 0:
+                    alertas_semana.append({
+                        "tipo": "totalventas_0",
+                        "severidad": "CRITICAL", 
+                        "mensaje": "No se registraron ventas en la semana"
+                    })
+                
+                # Alerta: Ganancia baja del día (< 50 soles)
+                ventas_hoy = next((v for v in ventas_diarias if v['fecha'] == fecha_str), None)
+                if ventas_hoy and ventas_hoy.get('ingresos', 0) < THRESHOLD_GANANCIA_BAJA:
+                    alertas_semana.append({
+                        "tipo": "gananciaDiaBaja",
+                        "severidad": "INFO",
+                        "mensaje": f"Ganancia del día baja: S/ {ventas_hoy['ingresos']:.2f}"
+                    })
+                
+                # Alerta: Producto top sin stock o stock bajo
+                if productos_top:
+                    producto_mas_vendido = productos_top[0]
+                    stock_producto = obtener_stock_producto(tenant_id, producto_mas_vendido['codigo_producto'])
+                    if stock_producto == 0:
+                        alertas_semana.append({
+                            "tipo": "productoTopSinStock",
+                            "severidad": "INFO",
+                            "mensaje": f"Producto más vendido sin stock: {producto_mas_vendido['nombre']}"
+                        })
+                    elif stock_producto <= THRESHOLD_STOCK_BAJO:
+                        alertas_semana.append({
+                            "tipo": "productoTopStockBajo",
+                            "severidad": "INFO",
+                            "mensaje": f"Producto más vendido con stock bajo: {producto_mas_vendido['nombre']} ({stock_producto} unidades)"
+                        })
+                
+                analitica_data["alertas_detectadas"] = alertas_semana
+            
+            # =================================================================
+            # GUARDAR EN t_analitica
+            # =================================================================
+            entity_id = periodo_nombre  # 'dia', 'semana', 'mes'
+            
+            success = put_item_standard(
+                table_name=os.environ['ANALITICA_TABLE'],
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+                data=analitica_data
+            )
+            
+            if success:
+                logger.info(f"  ✅ Analítica guardada: {periodo_nombre}")
+                resultados_guardados += 1
+            else:
+                logger.error(f"  ❌ Error guardando analítica: {periodo_nombre}")
         
         # =================================================================
-        # CÁLCULOS DE ANALÍTICA
+        # PUBLICAR ALERTAS EN SNS (solo las de semana)
         # =================================================================
+        if ALERTAS_TOPIC_ARN and alertas_semana:
+            await_publiar_alertas_sns(tenant_id, alertas_semana, codigo_usuario)
         
-        # 1. VENTAS del período
-        ventas_periodo = calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin)
-        
-        # 2. GASTOS del período
-        gastos_periodo = calcular_gastos_periodo(tenant_id, fecha_inicio, fecha_fin)
-        
-        # 3. Calcular BALANCE (ingresos - egresos)
-        balance = ventas_periodo['total_ingresos'] - gastos_periodo['total_egresos']
-        gastos_periodo['balance'] = round(balance, 2)
-        
-        # 4. INVENTARIO actual
-        inventario_actual = calcular_inventario_actual(tenant_id)
-        
-        # 5. USUARIOS de la tienda
-        usuarios_tienda = calcular_usuarios_tienda(tenant_id)
-        
-        # 6. PRODUCTOS TOP (más vendidos del período)
-        productos_top = calcular_productos_top(tenant_id, fecha_inicio, fecha_fin)
-        
-        # 7. VENTAS DIARIAS del período
-        ventas_diarias = calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin)
-        
-        # Construir resultado analítico
-        analitica_data = {
-            "periodo": {
-                "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
-                "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
-                "dias": 7
-            },
-            "ventas": ventas_periodo,
-            "gastos": gastos_periodo,
-            "inventario": inventario_actual,
-            "usuarios": usuarios_tienda,
-            "productos_top": productos_top,
-            "ventas_diarias": ventas_diarias,
-            "alertas_detectadas": [],
-            "updated_at": obtener_fecha_hora_peru()
-        }
-        
-        # =================================================================
-        # DETECCIÓN DE ALERTAS
-        # =================================================================
-        alertas = []
-        
-        # Alerta: Total ventas = 0
-        if ventas_periodo['total_ventas'] == 0:
-            alertas.append({
-                "tipo": "totalventas_0",
-                "severidad": "CRITICAL", 
-                "mensaje": "No se registraron ventas en el período"
-            })
-        
-        # Alerta: Ganancia baja del día (< 50 soles)
-        ventas_hoy = next((v for v in ventas_diarias if v['fecha'] == fecha_str), None)
-        if ventas_hoy and ventas_hoy.get('ingresos', 0) < THRESHOLD_GANANCIA_BAJA:
-            alertas.append({
-                "tipo": "gananciaDiaBaja",
-                "severidad": "INFO",
-                "mensaje": f"Ganancia del día baja: S/ {ventas_hoy['ingresos']:.2f}"
-            })
-        
-        # Alerta: Producto top sin stock o stock bajo
-        if productos_top:
-            producto_mas_vendido = productos_top[0]
-            stock_producto = obtener_stock_producto(tenant_id, producto_mas_vendido['codigo_producto'])
-            if stock_producto == 0:
-                alertas.append({
-                    "tipo": "productoTopSinStock",
-                    "severidad": "INFO",
-                    "mensaje": f"Producto más vendido sin stock: {producto_mas_vendido['nombre']}"
-                })
-            elif stock_producto <= THRESHOLD_STOCK_BAJO:
-                alertas.append({
-                    "tipo": "productoTopStockBajo",
-                    "severidad": "INFO",
-                    "mensaje": f"Producto más vendido con stock bajo: {producto_mas_vendido['nombre']} ({stock_producto} unidades)"
-                })
-        
-        analitica_data["alertas_detectadas"] = alertas
-        
-        # =================================================================
-        # GUARDAR EN t_analitica
-        # =================================================================
-        entity_id = f"{fecha_inicio.strftime('%Y-%m-%d')}_{fecha_fin.strftime('%Y-%m-%d')}"
-        
-        # Usar función estándar de utils
-        success = put_item_standard(
-            table_name=os.environ['ANALITICA_TABLE'],
-            tenant_id=tenant_id,
-            entity_id=entity_id,
-            data=analitica_data
-        )
-        
-        if not success:
-            return error_response("Error guardando analítica", 500)
-        
-        logger.info(f"✅ Analítica guardada: {entity_id}")
-        
-        # =================================================================
-        # PUBLICAR ALERTAS EN SNS
-        # =================================================================
-        if ALERTAS_TOPIC_ARN and alertas:
-            await_publiar_alertas_sns(tenant_id, alertas, codigo_usuario)
+        logger.info(f"✅ Analítica completa: {resultados_guardados}/3 periodos guardados")
         
         # =================================================================
         # EMITIR NOTIFICACIÓN WEBSOCKET (MÍNIMA)
         # =================================================================
         try:
-            # Payload mínimo: solo notifica que la analítica fue actualizada
-            # El frontend debe hacer refetch a GET /analitica para obtener los datos
             event_payload = {
                 'tenant_id': tenant_id,
                 'event_type': 'analitica_actualizada',
                 'payload': {
-                    'periodo': {
-                        'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
-                        'fecha_fin': fecha_fin.strftime('%Y-%m-%d')
-                    },
                     'timestamp': obtener_fecha_hora_peru(),
                     'mensaje': 'Analítica actualizada. Refetch datos desde /analitica'
                 }
@@ -199,19 +220,21 @@ def handler(event, context):
             
             lambda_client.invoke(
                 FunctionName=os.environ['EMITIR_EVENTOS_WS_FUNCTION_NAME'],
-                InvocationType='Event',  # Async
+                InvocationType='Event',
                 Payload=json.dumps(event_payload)
             )
             
-            logger.info(f"🔔 Notificación WebSocket 'analitica_actualizada' enviada (payload mínimo)")
+            logger.info(f"🔔 Notificación WebSocket 'analitica_actualizada' enviada")
         except Exception as ws_error:
             logger.warning(f"Error enviando notificación WebSocket: {str(ws_error)}")
-            # No fallar por WebSocket
         
-        return success_response(mensaje="Analítica actualizada")
+        return success_response(
+            mensaje=f"Analítica actualizada ({resultados_guardados}/3 periodos)",
+            data={"periodos_guardados": resultados_guardados}
+        )
         
     except Exception as e:
-        logger.error(f"Error actualizando analítica: {str(e)}")
+        logger.error(f"Error actualizando analítica: {str(e)}", exc_info=True)
         return error_response("Error interno del servidor", 500)
 
 # =================================================================
@@ -223,12 +246,12 @@ def calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin):
     try:
         from boto3.dynamodb.conditions import Attr
         
-        # Crear filtro para fechas
+        # Crear filtro para fechas (ventas usan estado='COMPLETADA' no 'ACTIVO')
         filter_expression = (
             Attr('data.fecha').between(
                 fecha_inicio.strftime('%Y-%m-%d'), 
                 fecha_fin.strftime('%Y-%m-%d')
-            ) & Attr('data.estado').eq('ACTIVO')
+            ) & Attr('data.estado').eq('COMPLETADA')
         )
         
         # Query usando utils
@@ -364,12 +387,12 @@ def calcular_productos_top(tenant_id, fecha_inicio, fecha_fin):
     try:
         from boto3.dynamodb.conditions import Attr
         
-        # Query ventas del período usando utils
+        # Query ventas del período usando utils (estado COMPLETADA)
         filter_expression = (
             Attr('data.fecha').between(
                 fecha_inicio.strftime('%Y-%m-%d'), 
                 fecha_fin.strftime('%Y-%m-%d')
-            ) & Attr('data.estado').eq('ACTIVO')
+            ) & Attr('data.estado').eq('COMPLETADA')
         )
         
         result = query_by_tenant(
@@ -413,12 +436,12 @@ def calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin):
     try:
         from boto3.dynamodb.conditions import Attr
         
-        # Query ventas del período usando utils
+        # Query ventas del período usando utils (estado COMPLETADA)
         filter_expression = (
             Attr('data.fecha').between(
                 fecha_inicio.strftime('%Y-%m-%d'), 
                 fecha_fin.strftime('%Y-%m-%d')
-            ) & Attr('data.estado').eq('ACTIVO')
+            ) & Attr('data.estado').eq('COMPLETADA')
         )
         
         result = query_by_tenant(
@@ -478,6 +501,16 @@ def obtener_stock_producto(tenant_id, codigo_producto):
     except Exception as e:
         logger.error(f"Error obteniendo stock producto {codigo_producto}: {str(e)}")
         return 0
+
+def convert_floats_to_decimal(obj):
+    """Convierte recursivamente floats a Decimal para DynamoDB"""
+    if isinstance(obj, dict):
+        return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimal(i) for i in obj]
+    elif isinstance(obj, float):
+        return Decimal(str(obj))
+    return obj
 
 def await_publiar_alertas_sns(tenant_id, alertas, codigo_usuario):
     """Publica alertas en SNS AlertasSAAI"""

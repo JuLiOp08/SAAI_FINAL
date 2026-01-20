@@ -16,7 +16,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event, context):
     """
-    GET /analitica
+    GET /analitica?periodo=semana
     
     Devuelve métricas analíticas previamente calculadas.
     NO recalcula, solo consulta t_analitica.
@@ -25,7 +25,7 @@ def handler(event, context):
     El frontend debe hacer refetch a este endpoint cuando reciba
     notificaciones WebSocket de tipo 'analitica_actualizada'.
     
-    Query params: ?periodo=7 (días)
+    Query params: ?periodo=semana (valores: dia, semana, mes. Default: semana)
     
     Response: {
       "success": true,
@@ -49,16 +49,16 @@ def handler(event, context):
         
         # Query params
         query_params = event.get('queryStringParameters') or {}
-        periodo_dias = int(query_params.get('periodo', 7))
+        periodo = query_params.get('periodo', 'semana')  # dia, semana, mes
         
-        # Calcular rango de fechas
-        lima_now = datetime.now(timezone.utc)  # Usar UTC para cálculos
-        fecha_fin = lima_now
-        fecha_inicio = lima_now - timedelta(days=periodo_dias - 1)
+        # Validar periodo
+        if periodo not in ['dia', 'semana', 'mes']:
+            return error_response("Periodo inválido. Use: dia, semana, mes", 400)
         
-        entity_id = f"{fecha_inicio.strftime('%Y-%m-%d')}_{fecha_fin.strftime('%Y-%m-%d')}"
+        # El entity_id es el nombre del periodo
+        entity_id = periodo
         
-        logger.info(f"📊 Consultando analítica: {tenant_id} - {entity_id}")
+        logger.info(f"📊 Consultando analítica: {tenant_id} - periodo: {periodo}")
         
         # =================================================================
         # CONSULTAR t_analitica usando utils
@@ -72,49 +72,36 @@ def handler(event, context):
             )
             
             if analitica_data:
-                logger.info(f"✅ Analítica encontrada: {entity_id}")
+                logger.info(f"✅ Analítica encontrada: {periodo}")
                 return success_response(data=analitica_data)
             
         except Exception as e:
-            logger.error(f"Error consultando analítica específica: {str(e)}")
+            logger.error(f"Error consultando analítica: {str(e)}")
         
         # =================================================================
-        # SI NO EXISTE EL PERÍODO EXACTO, BUSCAR EL MÁS RECIENTE usando utils
+        # SI NO HAY ANALÍTICA, DEVOLVER ESTRUCTURA VACÍA CON SUGERENCIA
         # =================================================================
         
-        try:
-            # Query analíticas de esta tienda usando utils
-            result = query_by_tenant(
-                table_name=os.environ['ANALITICA_TABLE'],
-                tenant_id=tenant_id,
-                limit=1
-            )
-            
-            items = result.get('items', [])
-            if items:
-                # Tomar la más reciente (primera en la lista)
-                analitica_data = items[0]
-                # Remover las keys internas agregadas por query_by_tenant
-                analitica_data.pop('_tenant_id', None)
-                analitica_data.pop('_entity_id', None)
-                
-                logger.info(f"📊 Analítica más reciente encontrada")
-                return success_response(data=analitica_data)
-            
-        except Exception as e:
-            logger.error(f"Error buscando analítica más reciente: {str(e)}")
+        logger.warning(f"⚠️ No se encontró analítica '{periodo}' para {tenant_id}")
         
-        # =================================================================
-        # SI NO HAY ANALÍTICA PREVIA, DEVOLVER ESTRUCTURA VACÍA
-        # =================================================================
-        
-        logger.warning(f"⚠️ No se encontró analítica para {tenant_id}")
+        # Calcular fechas para estructura vacía
+        fecha_calc = datetime.now(timezone.utc)
+        if periodo == 'dia':
+            fecha_inicio = fecha_calc
+            dias = 1
+        elif periodo == 'semana':
+            fecha_inicio = fecha_calc - timedelta(days=6)
+            dias = 7
+        else:  # mes
+            fecha_inicio = fecha_calc - timedelta(days=29)
+            dias = 30
         
         analitica_vacia = {
             "periodo": {
+                "tipo": periodo,
                 "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
-                "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
-                "dias": periodo_dias
+                "fecha_fin": fecha_calc.strftime('%Y-%m-%d'),
+                "dias": dias
             },
             "ventas": {
                 "total_ventas": 0,
@@ -137,12 +124,12 @@ def handler(event, context):
                 "trabajadores": 0
             },
             "productos_top": [],
-            "ventas_diarias": generar_ventas_diarias_vacias(fecha_inicio, fecha_fin),
+            "ventas_diarias": generar_ventas_diarias_vacias(fecha_inicio, fecha_calc),
             "alertas_detectadas": [
                 {
                     "tipo": "sinDatos",
                     "severidad": "INFO",
-                    "mensaje": "No hay analítica calculada. Ejecute 'Actualizar Analítica' primero."
+                    "mensaje": f"No hay analítica calculada para '{periodo}'. Ejecute 'Actualizar Analítica' primero."
                 }
             ]
         }

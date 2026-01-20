@@ -1099,15 +1099,21 @@ Path: /analitica
 
 Request:
 {
-  "body": {
-    "fecha": "2025-11-08"
-  }
+  "body": {}
 }
+
+NOTA: 
+- Este endpoint se ejecuta automáticamente cada 4 horas vía EventBridge
+- Calcula y guarda 3 periodos: dia (1d), semana (7d), mes (30d)
+- Frontend NO debe llamar este endpoint, solo VerAnalitica
 
 Response:
 {
   "success": true,
-  "message": "Analítica actualizada"
+  "mensaje": "Analítica actualizada (3/3 periodos)",
+  "data": {
+    "periodos_guardados": 3
+  }
 }
 
 (Internamente dispara SNS: AlertasSAAI → GuardarNotificacion)
@@ -1121,9 +1127,14 @@ Path: /analitica
 Request:
 {
   "query": {
-    "periodo": "7"
+    "periodo": "semana"
   }
 }
+
+NOTA:
+- periodo: Opcional, valores: "dia", "semana", "mes". Default: "semana"
+- Consulta analítica previamente calculada (NO recalcula)
+- Frontend debe refetch este endpoint al recibir WS 'analitica_actualizada'
 
 Response:
 {
