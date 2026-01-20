@@ -84,8 +84,9 @@ def handler(event, context):
         reportes_response = []
         
         for reporte_item in reportes_items:
-            # Acceder a los datos dentro del campo 'data'
-            data = reporte_item.get('data', {})
+            # Los datos pueden estar en 'data' (modelo estándar) o en el nivel raíz (legacy)
+            # Intentamos primero con 'data', si no existe usamos el item directamente
+            data = reporte_item.get('data', reporte_item)
             
             # Información básica del reporte
             reporte_info = {
