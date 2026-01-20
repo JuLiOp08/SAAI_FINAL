@@ -264,12 +264,19 @@ def handler(event, context):
             "created_at": fecha_actual
         }
         
-        put_item_standard(
-            os.environ['REPORTES_TABLE'],
-            tenant_id=tenant_id,
-            entity_id=codigo_reporte,
-            data=reporte_data
-        )
+        # Guardar en t_reportes
+        logger.info(f"💾 Guardando reporte en DynamoDB: tenant_id={tenant_id}, entity_id={codigo_reporte}")
+        try:
+            put_item_standard(
+                os.environ['REPORTES_TABLE'],
+                tenant_id=tenant_id,
+                entity_id=codigo_reporte,
+                data=reporte_data
+            )
+            logger.info(f"✅ Reporte guardado en t_reportes: {codigo_reporte}")
+        except Exception as db_error:
+            logger.error(f"❌ ERROR guardando en DynamoDB: {str(db_error)}")
+            logger.error(f"Detalles - Table: {os.environ.get('REPORTES_TABLE')}, tenant_id: {tenant_id}, entity_id: {codigo_reporte}")
         
         logger.info(f"✅ Reporte gastos generado: {codigo_reporte}")
         
