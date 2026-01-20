@@ -1,0 +1,419 @@
+# PROMPT PARA IA - FRONTEND SAAI TRABAJADOR (React Native)
+
+## 🎯 CONTEXTO DEL PROYECTO
+
+Estoy desarrollando una aplicación móvil React Native para **TRABAJADORES DE TIENDA** del sistema SAAI (Smart Assistant for Inventory). Esta es 1 de 3 aplicaciones del ecosistema.
+
+**Rol del usuario:** TRABAJADOR/WORKER
+- Permisos: Gestión de productos, registro de ventas, consulta de notificaciones
+- Sin acceso a: Gastos, analítica, reportes, usuarios, predicciones ML
+
+**Backend:** AWS Serverless (API Gateway + Lambda + DynamoDB)
+- Autenticación: JWT (Bearer token)
+- Multi-tenant: Cada trabajador pertenece a UNA tienda (tenant_id en JWT)
+- WebSockets: Notificaciones en tiempo real
+
+---
+
+## 📚 ARCHIVOS DE REFERENCIA OBLIGATORIOS
+
+**IMPORTANTE:** Antes de escribir cualquier código, debes leer y entender completamente estos documentos:
+
+### 1. SAAI_oficial.txt
+- **Sección crítica:** "2. Arquitectura TRABAJADOR"
+  - 2.1 Endpoints (Request/Response) - Líneas 82-510
+  - 2.2 Lambdas (qué hace cada una) - Líneas 512-705
+- **Convenciones del backend:** Líneas 1-80
+  - Autenticación y JWT
+  - Multi-tenant (tenant_id)
+  - Modelo DynamoDB (tenant_id + entity_id + data)
+  - Códigos vs UUIDs (el frontend SOLO usa códigos: T001P001, T001V005, etc.)
+  - Fecha/Hora Perú (backend decide timestamps)
+  - Paginación (limit + next_token)
+
+### 2. SAAI_resumen_tecnico.txt
+- Arquitectura general del sistema
+- Flujo de autenticación
+- WebSockets y eventos en tiempo real
+- Persistencia y modelo de datos
+
+### 3. SAAI_Backend_Complete.postman_collection.json
+- **Usar como referencia para:**
+  - Request bodies exactos (estructura JSON)
+  - Response esperados (estructura de datos)
+  - Headers requeridos (Authorization: Bearer)
+  - Variables de colección (base_url, tokens, etc.)
+- **Módulos relevantes para TRABAJADOR:**
+  - 1. AUTH → Login Worker
+  - 3. PRODUCTOS → Crear, Listar, Buscar, Actualizar, Eliminar
+  - 4. VENTAS → Calcular Monto, Registrar, Listar, Buscar
+  - 9. NOTIFICACIONES → Listar
+
+---
+
+## 🏗️ ESTRUCTURA DE LA APP
+
+**Revisa la plantilla React Native que he creado** antes de empezar. La estructura debe ser:
+
+```
+saai-trabajador/
+├── src/
+│   ├── screens/          # Pantallas principales
+│   │   ├── auth/
+│   │   │   └── LoginScreen.js
+│   │   ├── productos/
+│   │   │   ├── ListaProductosScreen.js
+│   │   │   ├── CrearProductoScreen.js
+│   │   │   ├── EditarProductoScreen.js
+│   │   │   └── BuscarProductosScreen.js
+│   │   ├── ventas/
+│   │   │   ├── RegistrarVentaScreen.js
+│   │   │   ├── ListaVentasScreen.js
+│   │   │   └── BuscarVentasScreen.js
+│   │   └── notificaciones/
+│   │       └── NotificacionesScreen.js
+│   ├── components/       # Componentes reutilizables
+│   │   ├── ProductCard.js
+│   │   ├── VentaCard.js
+│   │   ├── NotificationBadge.js
+│   │   └── SearchBar.js
+│   ├── services/         # Lógica de API y WebSocket
+│   │   ├── api.js       # Axios instance con interceptors
+│   │   ├── auth.js      # Login, logout, token management
+│   │   ├── productos.js # CRUD productos
+│   │   ├── ventas.js    # Registrar/listar ventas
+│   │   └── websocket.js # WebSocket connection
+│   ├── context/          # Estado global (Context API o Redux)
+│   │   ├── AuthContext.js
+│   │   └── NotificationContext.js
+│   ├── navigation/       # React Navigation
+│   │   ├── AppNavigator.js
+│   │   └── AuthNavigator.js
+│   └── utils/
+│       ├── constants.js  # API_URL, categorías, métodos pago
+│       └── helpers.js    # Formateo de fecha, moneda
+└── App.js
+```
+
+---
+
+## 🚀 ORDEN DE IMPLEMENTACIÓN SUGERIDO
+
+### FASE 1: Autenticación y Navegación (COMENZAR AQUÍ)
+1. **LoginScreen** 
+   - POST /login con email + password
+   - Guardar token en AsyncStorage
+   - Extraer tenant_id y codigo_usuario del response
+   - Navegación a HomeScreen después de login exitoso
+
+2. **AuthContext**
+   - Estado global: { user, token, tenant_id, isAuthenticated }
+   - Funciones: login(), logout(), checkAuth()
+   - Persistencia de sesión (AsyncStorage)
+
+3. **API Service (api.js)**
+   - Axios instance con baseURL
+   - Interceptor para agregar Authorization: Bearer {token}
+   - Interceptor para manejar errores 401 (logout automático)
+
+### FASE 2: Productos (Core Functionality)
+4. **ListaProductosScreen**
+   - GET /productos con paginación (limit + next_token)
+   - FlatList con pull-to-refresh
+   - Mostrar: código, nombre, precio, stock, categoría
+   - Navegación a Editar/Eliminar
+
+5. **CrearProductoScreen**
+   - Formulario: nombre, precio, stock, categoría, descripción
+   - POST /productos
+   - Validaciones: precio > 0, stock >= 0, campos requeridos
+   - Categorías fijas: bebidas, snacks, abarrotes, limpieza, otros
+
+6. **BuscarProductosScreen**
+   - POST /productos/buscar con query
+   - SearchBar con debounce
+   - Búsqueda por: nombre, código, categoría
+
+7. **EditarProductoScreen**
+   - PUT /productos/{codigo_producto}
+   - Pre-fill del formulario con datos actuales
+   - Solo editar: precio, stock, descripción (nombre y categoría no se cambian)
+
+### FASE 3: Ventas (Critical Feature)
+8. **RegistrarVentaScreen**
+   - Selector de productos (múltiple)
+   - Cantidad por producto
+   - POST /ventas/calcular (preview del total SIN guardar)
+   - POST /ventas (registrar venta final)
+   - Selector de método de pago: efectivo, tarjeta, yape
+   - Mostrar total calculado antes de confirmar
+
+9. **ListaVentasScreen**
+   - GET /ventas con paginación
+   - Mostrar: código, fecha, cliente, total, método pago
+   - Filtros: fecha (hoy, esta semana, este mes)
+
+10. **BuscarVentasScreen**
+    - POST /ventas/buscar
+    - Búsqueda por: código, fecha, método de pago, producto vendido
+
+### FASE 4: Notificaciones y WebSocket
+11. **NotificacionesScreen**
+    - GET /notificacion con paginación
+    - Lista de alertas del sistema
+    - Badge con contador de no leídas
+
+12. **WebSocket Service**
+    - Conectar a WebSocket API al login
+    - Escuchar eventos: venta_registrada, producto_actualizado
+    - Mostrar notificaciones push nativas
+    - Actualizar badge de notificaciones
+
+### FASE 5: Pulido y UX
+13. **Mejoras generales**
+    - Loading states (ActivityIndicator)
+    - Error handling (Toast/Alert)
+    - Validaciones de formularios
+    - Confirmaciones antes de eliminar
+    - Pull-to-refresh en todas las listas
+    - Infinite scroll en listas paginadas
+
+---
+
+## 💡 TIPS IMPORTANTES
+
+### 1. Autenticación
+```javascript
+// CORRECTO: El token se guarda en login y se usa en todas las requests
+const login = async (email, password) => {
+  const response = await api.post('/login', { email, password });
+  const { token, user } = response.data.data;
+  await AsyncStorage.setItem('token', token);
+  await AsyncStorage.setItem('user', JSON.stringify(user));
+  setAuthState({ token, user, isAuthenticated: true });
+};
+
+// CORRECTO: Axios interceptor agrega el token automáticamente
+api.interceptors.request.use(config => {
+  const token = AsyncStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+```
+
+### 2. Códigos vs UUIDs
+```javascript
+// ❌ INCORRECTO: Nunca uses UUID
+const eliminar = (uuid) => api.delete(`/productos/${uuid}`);
+
+// ✅ CORRECTO: Usa siempre códigos (T001P001, T001V005, etc.)
+const eliminar = (codigo_producto) => api.delete(`/productos/${codigo_producto}`);
+```
+
+### 3. Paginación
+```javascript
+const [productos, setProductos] = useState([]);
+const [nextToken, setNextToken] = useState(null);
+
+const fetchProductos = async () => {
+  const params = { limit: 20 };
+  if (nextToken) params.next_token = nextToken;
+  
+  const response = await api.get('/productos', { params });
+  setProductos([...productos, ...response.data.data.productos]);
+  setNextToken(response.data.data.next_token || null);
+};
+```
+
+### 4. Fecha/Hora
+```javascript
+// ❌ INCORRECTO: No envíes fecha/hora desde el frontend
+const venta = {
+  productos: [...],
+  fecha: new Date().toISOString() // ❌ NO HACER ESTO
+};
+
+// ✅ CORRECTO: El backend genera la fecha automáticamente
+const venta = {
+  productos: [...],
+  metodo_pago: 'efectivo'
+  // fecha NO se envía
+};
+```
+
+### 5. WebSockets
+```javascript
+// Conectar al login
+const connectWebSocket = (token) => {
+  const ws = new WebSocket(`wss://xxx.execute-api.us-east-1.amazonaws.com/dev?token=${token}`);
+  
+  ws.onmessage = (event) => {
+    const { event_type, payload } = JSON.parse(event.data);
+    
+    if (event_type === 'venta_registrada') {
+      // Mostrar notificación push
+      showNotification('Nueva venta registrada');
+      // Refetch lista de ventas
+      fetchVentas();
+    }
+  };
+};
+```
+
+### 6. Validaciones
+```javascript
+// Validar antes de enviar al backend
+const validarProducto = (data) => {
+  const errors = {};
+  
+  if (!data.nombre || data.nombre.trim() === '') {
+    errors.nombre = 'Nombre es requerido';
+  }
+  if (!data.precio || data.precio <= 0) {
+    errors.precio = 'Precio debe ser mayor a 0';
+  }
+  if (!data.stock || data.stock < 0) {
+    errors.stock = 'Stock no puede ser negativo';
+  }
+  
+  return Object.keys(errors).length === 0 ? null : errors;
+};
+```
+
+### 7. Error Handling
+```javascript
+// Manejar errores de API consistentemente
+try {
+  const response = await api.post('/productos', data);
+  Alert.alert('Éxito', 'Producto creado correctamente');
+  navigation.goBack();
+} catch (error) {
+  const mensaje = error.response?.data?.message || 'Error al crear producto';
+  Alert.alert('Error', mensaje);
+}
+```
+
+---
+
+## 📱 FEATURES ESPECÍFICAS TRABAJADOR
+
+### Productos
+- ✅ Crear, editar, eliminar, listar, buscar
+- ✅ Categorías predefinidas (no custom)
+- ✅ Stock siempre >= 0
+- ✅ Precio siempre > 0
+
+### Ventas
+- ✅ Calcular total ANTES de registrar (POST /ventas/calcular)
+- ✅ Descuento de stock automático (backend)
+- ✅ Métodos de pago: efectivo, tarjeta, yape
+- ✅ Cliente opcional (default: "Cliente General")
+- ✅ No se pueden editar ni eliminar ventas (solo listar/buscar)
+
+### Notificaciones
+- ✅ Solo lectura (generadas por backend)
+- ✅ Tipos: stock_bajo, venta_registrada, producto_actualizado
+- ✅ Badge con contador de no leídas
+- ✅ WebSocket para notificaciones en tiempo real
+
+### Restricciones
+- ❌ Sin acceso a gastos
+- ❌ Sin acceso a analítica
+- ❌ Sin acceso a reportes
+- ❌ Sin acceso a gestión de usuarios
+- ❌ Sin acceso a predicciones ML
+
+---
+
+## 🎨 UI/UX RECOMENDACIONES
+
+1. **Colores:** Usar tema consistente (azul primary, verde success, rojo danger)
+2. **Navegación:** BottomTabNavigator con 3 tabs principales:
+   - 🏠 Inicio (Dashboard simple)
+   - 📦 Productos (Lista + botón crear)
+   - 💰 Ventas (Registrar + historial)
+   - 🔔 Notificaciones (Lista + badge)
+3. **Icons:** React Native Vector Icons (MaterialCommunityIcons)
+4. **Forms:** React Hook Form para validaciones
+5. **Toast:** react-native-toast-message para feedback
+6. **Pull to Refresh:** En todas las listas
+7. **Loading:** ActivityIndicator mientras carga datos
+8. **Empty States:** Mensajes amigables cuando no hay datos
+
+---
+
+## ⚠️ ERRORES COMUNES A EVITAR
+
+1. **NO uses UUIDs**, solo códigos (T001P001, T001V005)
+2. **NO envíes fecha/hora** desde frontend (el backend decide)
+3. **NO calcules totales** en frontend (usa POST /ventas/calcular)
+4. **NO guardes tenant_id** manualmente (sale del JWT automáticamente)
+5. **NO permitas stock negativo** en formularios
+6. **NO permitas editar/eliminar ventas** (solo productos)
+7. **NO llames a ActualizarAnalitica** (es solo EventBridge)
+8. **NO uses HTTP en producción** (solo HTTPS para WebSockets)
+
+---
+
+## 🔧 CONFIGURACIÓN INICIAL
+
+```javascript
+// src/utils/constants.js
+export const API_URL = 'https://xxx.execute-api.us-east-1.amazonaws.com/dev';
+export const WS_URL = 'wss://xxx.execute-api.us-east-1.amazonaws.com/dev';
+
+export const CATEGORIAS = [
+  'bebidas',
+  'snacks',
+  'abarrotes',
+  'limpieza',
+  'otros'
+];
+
+export const METODOS_PAGO = [
+  'efectivo',
+  'tarjeta',
+  'yape'
+];
+```
+
+---
+
+## ✅ CHECKLIST DE IMPLEMENTACIÓN
+
+Usa este checklist para trackear progreso:
+
+- [ ] LoginScreen + AuthContext
+- [ ] API Service con interceptors
+- [ ] Navegación principal (BottomTabs)
+- [ ] ListaProductosScreen con paginación
+- [ ] CrearProductoScreen con validaciones
+- [ ] EditarProductoScreen
+- [ ] BuscarProductosScreen
+- [ ] RegistrarVentaScreen con cálculo previo
+- [ ] ListaVentasScreen
+- [ ] BuscarVentasScreen
+- [ ] NotificacionesScreen
+- [ ] WebSocket service
+- [ ] Error handling global
+- [ ] Loading states
+- [ ] Pull-to-refresh
+- [ ] Testing en dispositivo real
+
+---
+
+## 🚦 COMENZAR AHORA
+
+**Primer paso:** Lee SAAI_oficial.txt sección "2. Arquitectura TRABAJADOR" completa.
+
+**Segundo paso:** Revisa la estructura de carpetas de la plantilla React Native.
+
+**Tercer paso:** Implementa LoginScreen + AuthContext (FASE 1.1 y 1.2).
+
+**Pregunta antes de continuar:** ¿Entendiste el flujo de autenticación y cómo se usa el JWT en todas las requests?
+
+---
+
+¡Empecemos! Dime cuando hayas leído los archivos de referencia y estés listo para implementar el LoginScreen.

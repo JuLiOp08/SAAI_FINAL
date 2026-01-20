@@ -1,0 +1,484 @@
+# PROMPT PARA IA - FRONTEND SAAI PLATAFORMA (React Native)
+
+## 🎯 CONTEXTO DEL PROYECTO
+
+Estoy desarrollando una aplicación móvil React Native para **SUPER ADMINISTRADORES** de la plataforma SAAI (Smart Assistant for Inventory). Esta app gestiona TODAS las tiendas del sistema.
+
+**Rol del usuario:** SAAI (Super Admin)
+- Permisos: Gestión global de tiendas, registro de nuevas tiendas, consulta de analítica multi-tenant
+- NO gestiona productos, ventas, usuarios de tiendas individuales (eso es rol ADMIN)
+- Enfoque: Administración de la plataforma, onboarding de clientes
+
+**Backend:** AWS Serverless (API Gateway + Lambda + DynamoDB)
+- Autenticación: JWT (Bearer token) con rol 'saai'
+- Multi-tenant: Puede ver/gestionar TODAS las tiendas (tenant_id = 'SAAI' para queries globales)
+- SNS: Publica eventos BienvenidaSAAI al registrar tienda
+- S3: Crea carpetas automáticamente para cada tienda
+
+---
+
+## 📚 ARCHIVOS DE REFERENCIA OBLIGATORIOS
+
+**IMPORTANTE:** Antes de escribir cualquier código, debes leer y entender completamente estos documentos:
+
+### 1. SAAI_oficial.txt
+- **Sección crítica:** "1.4 Estado y eliminación lógica (soft delete)" - Líneas 21-44
+  - Estados de tienda: ACTIVA, SUSPENDIDA, ELIMINADA
+  - Diferencia entre estados de tienda vs entidades internas
+- **Convenciones generales:** Líneas 1-80
+- **Buscar módulo TIENDAS en Postman:** Endpoints de gestión de tiendas
+
+### 2. SAAI_resumen_tecnico.txt
+- Arquitectura general del sistema
+- Multi-tenant y tenant_id
+- SNS BienvenidaSAAI y CrearRecursosTienda
+
+### 3. SAAI_Backend_Complete.postman_collection.json
+- **Módulo relevante para SAAI:**
+  - 0. SETUP → Crear Usuario SAAI (ejecutar 1 vez)
+  - 1. AUTH → Login SAAI
+  - 10. TIENDAS (SAAI) → CRUD completo de tiendas
+    - Registrar Tienda
+    - Listar Tiendas
+    - Buscar Tienda
+    - Actualizar Tienda (cambiar estado)
+    - Eliminar Tienda
+
+---
+
+## 🏗️ ESTRUCTURA DE LA APP
+
+```
+saai-plataforma/
+├── src/
+│   ├── screens/
+│   │   ├── auth/
+│   │   │   └── LoginScreen.js
+│   │   ├── dashboard/
+│   │   │   └── DashboardSAAIScreen.js      # Vista global de tiendas
+│   │   ├── tiendas/
+│   │   │   ├── ListaTiendasScreen.js       # Todas las tiendas
+│   │   │   ├── RegistrarTiendaScreen.js    # Onboarding de cliente
+│   │   │   ├── DetalleTiendaScreen.js      # Info + cambiar estado
+│   │   │   └── BuscarTiendasScreen.js
+│   │   └── configuracion/
+│   │       └── ConfiguracionScreen.js      # Settings de la plataforma
+│   ├── components/
+│   │   ├── TiendaCard.js                   # Card con info de tienda + badge estado
+│   │   ├── EstadoBadge.js                  # Badge: ACTIVA (verde), SUSPENDIDA (naranja), ELIMINADA (rojo)
+│   │   ├── StatsCard.js                    # Tarjeta con estadísticas globales
+│   │   └── SearchBar.js
+│   ├── services/
+│   │   ├── api.js
+│   │   ├── auth.js
+│   │   └── tiendas.js                      # CRUD tiendas
+│   ├── context/
+│   │   ├── AuthContext.js
+│   │   └── TiendasContext.js               # Estado global de tiendas
+│   ├── navigation/
+│   │   ├── AppNavigator.js
+│   │   └── StackNavigator.js
+│   └── utils/
+│       ├── constants.js
+│       └── helpers.js
+└── App.js
+```
+
+---
+
+## 🚀 ORDEN DE IMPLEMENTACIÓN SUGERIDO
+
+### FASE 1: Autenticación (COMENZAR AQUÍ)
+1. **LoginScreen**
+   - POST /login con email: saai@saai.com, password: admin123
+   - Guardar token en AsyncStorage
+   - Verificar rol === 'saai' en el response
+   - Navegación a DashboardSAAIScreen
+
+2. **AuthContext**
+   - Estado: { user, token, isSAAI: true, isAuthenticated }
+   - login(), logout(), checkAuth()
+   - Persistencia de sesión
+
+3. **API Service**
+   - Axios con baseURL
+   - Interceptor Authorization: Bearer {token}
+   - Error handling 401
+
+### FASE 2: Dashboard Global (Vista Principal)
+4. **DashboardSAAIScreen**
+   - GET /tiendas (sin filtros, todas las tiendas)
+   - Cards con estadísticas:
+     - Total tiendas
+     - Tiendas activas
+     - Tiendas suspendidas
+     - Tiendas eliminadas
+   - Botón flotante "Registrar Nueva Tienda"
+   - Lista resumida de tiendas recientes (últimas 5)
+
+### FASE 3: Gestión de Tiendas (Core Feature)
+5. **RegistrarTiendaScreen** (CRÍTICO - Onboarding de clientes)
+   - Formulario en 2 secciones:
+     - **Datos de Tienda:**
+       - nombre_tienda (requerido)
+       - email_tienda (requerido, único)
+       - telefono (opcional)
+     - **Administrador Inicial:**
+       - nombre (requerido)
+       - email (requerido, único)
+       - password (requerido, min 6 caracteres)
+   - POST /tiendas
+   - **IMPORTANTE:** Backend automáticamente:
+     - Genera codigo_tienda (T001, T002, T003...)
+     - Crea admin inicial con rol 'admin'
+     - Publica SNS BienvenidaSAAI → crea carpeta S3 + suscripción alertas
+     - Envía email de bienvenida
+   - Mostrar código de tienda generado en success modal
+   - Copiar código al clipboard
+
+6. **ListaTiendasScreen**
+   - GET /tiendas con paginación
+   - Filtros por estado (tabs): Todas, Activas, Suspendidas, Eliminadas
+   - FlatList con TiendaCard
+   - Pull-to-refresh
+   - Navegación a DetalleTiendaScreen
+
+7. **TiendaCard Component**
+   - Mostrar:
+     - codigo_tienda (T001, T002...)
+     - nombre_tienda
+     - email_tienda
+     - estado (badge con color)
+     - fecha_creacion
+   - Tocar → navegar a DetalleTiendaScreen
+
+8. **DetalleTiendaScreen**
+   - Mostrar info completa de la tienda
+   - **Cambiar Estado:**
+     - ACTIVA → SUSPENDIDA (botón "Suspender")
+     - SUSPENDIDA → ACTIVA (botón "Reactivar")
+     - ACTIVA/SUSPENDIDA → ELIMINADA (botón "Eliminar" con confirmación)
+   - **IMPORTANTE:** Estados son irreversibles en algunos casos:
+     - ELIMINADA no puede volver a ACTIVA/SUSPENDIDA
+     - Soft delete: datos se conservan pero tienda no puede operar
+   - PUT /tiendas/{codigo_tienda}
+   - Mostrar admin inicial (nombre, email)
+   - Mostrar fecha de creación
+   - Botón "Editar" → solo nombre, teléfono, email_tienda
+
+9. **BuscarTiendasScreen**
+   - POST /tiendas/buscar
+   - SearchBar con query
+   - Búsqueda por: nombre_tienda, codigo_tienda, email_tienda
+   - Resultados en FlatList
+
+### FASE 4: Configuración
+10. **ConfiguracionScreen**
+    - Información del usuario SAAI
+    - Logout
+    - Versión de la app
+    - Links: Soporte, Documentación
+
+---
+
+## 💡 TIPS ESPECÍFICOS SAAI
+
+### 1. Registro de Tienda - Proceso Completo
+```javascript
+// ✅ CORRECTO: Backend hace TODO automáticamente
+const registrarTienda = async (data) => {
+  const payload = {
+    nombre_tienda: data.nombreTienda,
+    email_tienda: data.emailTienda,
+    telefono: data.telefono,
+    admin: {
+      nombre: data.adminNombre,
+      email: data.adminEmail,
+      password: data.adminPassword
+    }
+  };
+  
+  const response = await api.post('/tiendas', payload);
+  const { codigo_tienda, nombre_tienda } = response.data.data;
+  
+  // Mostrar modal de éxito con código generado
+  Alert.alert(
+    '🎉 Tienda Registrada',
+    `Código: ${codigo_tienda}\nNombre: ${nombre_tienda}\n\nSe ha enviado un email de bienvenida al administrador.`,
+    [
+      { text: 'Copiar Código', onPress: () => Clipboard.setString(codigo_tienda) },
+      { text: 'OK' }
+    ]
+  );
+};
+
+// ⚠️ Lo que hace el backend automáticamente:
+// 1. Genera codigo_tienda (T001, T002, T003...)
+// 2. Crea usuario admin con rol 'admin'
+// 3. Publica SNS BienvenidaSAAI
+// 4. Lambda CrearRecursosTienda crea:
+//    - Carpeta S3: s3://saai-tiendas/{codigo_tienda}/
+//    - Suscripción SNS AlertasSAAI con filtro tenant_id
+// 5. Lambda EnviarCorreoBienvenida envía email con credenciales
+```
+
+### 2. Estados de Tienda - Transiciones Permitidas
+```javascript
+const TRANSICIONES_ESTADO = {
+  ACTIVA: ['SUSPENDIDA', 'ELIMINADA'],
+  SUSPENDIDA: ['ACTIVA', 'ELIMINADA'],
+  ELIMINADA: [] // No se puede reactivar
+};
+
+const cambiarEstado = async (codigo_tienda, estadoActual, nuevoEstado) => {
+  // Validar transición
+  if (!TRANSICIONES_ESTADO[estadoActual].includes(nuevoEstado)) {
+    Alert.alert('Error', 'Transición de estado no permitida');
+    return;
+  }
+  
+  // Confirmación para ELIMINADA
+  if (nuevoEstado === 'ELIMINADA') {
+    Alert.alert(
+      '⚠️ Eliminar Tienda',
+      'Esta acción no se puede deshacer. La tienda no podrá operar pero sus datos se conservarán.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Eliminar', 
+          style: 'destructive',
+          onPress: () => actualizarEstado(codigo_tienda, nuevoEstado)
+        }
+      ]
+    );
+  } else {
+    actualizarEstado(codigo_tienda, nuevoEstado);
+  }
+};
+
+const actualizarEstado = async (codigo_tienda, estado) => {
+  await api.put(`/tiendas/${codigo_tienda}`, { estado });
+  fetchTiendas(); // Refetch lista
+};
+```
+
+### 3. Listar Tiendas - Filtros por Estado
+```javascript
+const [filtroEstado, setFiltroEstado] = useState('TODAS');
+
+const fetchTiendas = async () => {
+  const response = await api.get('/tiendas', {
+    params: {
+      limit: 20,
+      ...(nextToken && { next_token: nextToken })
+    }
+  });
+  
+  let tiendas = response.data.data.tiendas;
+  
+  // Filtrar localmente por estado (o agregar query param en backend)
+  if (filtroEstado !== 'TODAS') {
+    tiendas = tiendas.filter(t => t.estado === filtroEstado);
+  }
+  
+  setTiendas(tiendas);
+  setNextToken(response.data.data.next_token);
+};
+
+// Tabs para filtros
+<View style={styles.tabs}>
+  <Tab active={filtroEstado === 'TODAS'} onPress={() => setFiltroEstado('TODAS')}>
+    Todas
+  </Tab>
+  <Tab active={filtroEstado === 'ACTIVA'} onPress={() => setFiltroEstado('ACTIVA')}>
+    Activas
+  </Tab>
+  <Tab active={filtroEstado === 'SUSPENDIDA'} onPress={() => setFiltroEstado('SUSPENDIDA')}>
+    Suspendidas
+  </Tab>
+  <Tab active={filtroEstado === 'ELIMINADA'} onPress={() => setFiltroEstado('ELIMINADA')}>
+    Eliminadas
+  </Tab>
+</View>
+```
+
+### 4. Dashboard - Estadísticas Globales
+```javascript
+const calcularEstadisticas = (tiendas) => {
+  return {
+    total: tiendas.length,
+    activas: tiendas.filter(t => t.estado === 'ACTIVA').length,
+    suspendidas: tiendas.filter(t => t.estado === 'SUSPENDIDA').length,
+    eliminadas: tiendas.filter(t => t.estado === 'ELIMINADA').length
+  };
+};
+
+// Dashboard
+const DashboardSAAIScreen = () => {
+  const [stats, setStats] = useState({ total: 0, activas: 0, suspendidas: 0, eliminadas: 0 });
+  
+  useEffect(() => {
+    fetchTiendas().then(tiendas => {
+      setStats(calcularEstadisticas(tiendas));
+    });
+  }, []);
+  
+  return (
+    <View>
+      <StatsCard title="Total Tiendas" value={stats.total} icon="store" color="#1E88E5" />
+      <StatsCard title="Activas" value={stats.activas} icon="check-circle" color="#43A047" />
+      <StatsCard title="Suspendidas" value={stats.suspendidas} icon="pause-circle" color="#FB8C00" />
+      <StatsCard title="Eliminadas" value={stats.eliminadas} icon="cancel" color="#E53935" />
+    </View>
+  );
+};
+```
+
+### 5. Badges de Estado
+```javascript
+const EstadoBadge = ({ estado }) => {
+  const configs = {
+    ACTIVA: { color: '#43A047', icon: 'check-circle', text: 'Activa' },
+    SUSPENDIDA: { color: '#FB8C00', icon: 'pause-circle', text: 'Suspendida' },
+    ELIMINADA: { color: '#E53935', icon: 'cancel', text: 'Eliminada' }
+  };
+  
+  const config = configs[estado] || configs.ACTIVA;
+  
+  return (
+    <View style={[styles.badge, { backgroundColor: config.color }]}>
+      <Icon name={config.icon} size={16} color="#FFF" />
+      <Text style={styles.badgeText}>{config.text}</Text>
+    </View>
+  );
+};
+```
+
+### 6. Validaciones - Email Único
+```javascript
+// Backend valida email único automáticamente, mostrar error
+const registrarTienda = async (data) => {
+  try {
+    await api.post('/tiendas', data);
+    navigation.navigate('ListaTiendas');
+  } catch (error) {
+    if (error.response?.status === 400) {
+      const mensaje = error.response.data.message;
+      
+      if (mensaje.includes('email ya existe')) {
+        Alert.alert('Error', 'El email de la tienda ya está registrado');
+      } else if (mensaje.includes('admin email ya existe')) {
+        Alert.alert('Error', 'El email del administrador ya está en uso');
+      } else {
+        Alert.alert('Error', mensaje);
+      }
+    }
+  }
+};
+```
+
+---
+
+## 📊 FEATURES ESPECÍFICAS SAAI
+
+### Gestión de Tiendas
+- ✅ Registrar nueva tienda + admin inicial
+- ✅ Listar todas las tiendas (multi-tenant)
+- ✅ Buscar tiendas por nombre, código, email
+- ✅ Cambiar estado: ACTIVA ↔ SUSPENDIDA → ELIMINADA
+- ✅ Editar datos básicos (nombre, email, teléfono)
+- ✅ Soft delete con auditoría (motivo_baja, fecha_baja)
+
+### Dashboard Global
+- ✅ Estadísticas: Total, Activas, Suspendidas, Eliminadas
+- ✅ Tiendas recientes (últimas 5)
+- ✅ Acceso rápido a registrar nueva tienda
+
+### Onboarding Automatizado
+- ✅ Registro de tienda en 1 paso (datos tienda + admin)
+- ✅ Backend crea recursos automáticamente:
+  - Carpeta S3
+  - Suscripción SNS
+  - Usuario admin inicial
+  - Email de bienvenida
+
+### Restricciones
+- ❌ No gestiona productos de tiendas individuales
+- ❌ No gestiona ventas de tiendas individuales
+- ❌ No gestiona usuarios internos de tiendas (eso es rol ADMIN)
+- ❌ No genera reportes de tiendas individuales
+- ❌ No ve analítica detallada de tiendas (solo overview global)
+
+---
+
+## ⚠️ ERRORES COMUNES A EVITAR
+
+1. **NO confundas estados de tienda (ACTIVA/SUSPENDIDA/ELIMINADA) con estados de entidades internas (ACTIVO/INACTIVO)**
+2. **NO permitas reactivar tiendas ELIMINADAS** (transición no permitida)
+3. **NO gestiones productos/ventas desde app SAAI** (eso es rol ADMIN)
+4. **NO envíes codigo_tienda** al registrar (backend lo genera)
+5. **NO permitas emails duplicados** (tienda y admin deben ser únicos)
+6. **NO llames a endpoints de otras apps** (/productos, /ventas, /analitica son de ADMIN)
+7. **NO uses tenant_id** directamente (rol SAAI ve todas las tiendas, no tiene tenant_id específico)
+
+---
+
+## 🎨 UI/UX RECOMENDACIONES
+
+1. **Navegación:** StackNavigator simple
+   - Dashboard → Lista Tiendas → Detalle Tienda
+   - Dashboard → Registrar Tienda
+2. **Colores por Estado:**
+   - ACTIVA: Verde (#43A047)
+   - SUSPENDIDA: Naranja (#FB8C00)
+   - ELIMINADA: Rojo (#E53935)
+3. **Icons:** MaterialCommunityIcons
+   - store: Tiendas
+   - plus-circle: Registrar
+   - magnify: Buscar
+   - cog: Configuración
+4. **Cards:** TiendaCard con badge de estado prominente
+5. **Stats:** Cards grandes con números grandes (Dashboard)
+6. **Confirmaciones:** Alert para acciones destructivas (eliminar, suspender)
+7. **Success Modals:** Mostrar código de tienda generado con opción de copiar
+
+---
+
+## ✅ CHECKLIST DE IMPLEMENTACIÓN
+
+- [ ] LoginScreen + AuthContext
+- [ ] API Service con interceptors
+- [ ] DashboardSAAIScreen con estadísticas
+- [ ] RegistrarTiendaScreen (2 secciones: tienda + admin)
+- [ ] ListaTiendasScreen con filtros por estado
+- [ ] TiendaCard component con badge
+- [ ] DetalleTiendaScreen con cambio de estado
+- [ ] EstadoBadge component
+- [ ] BuscarTiendasScreen
+- [ ] ConfiguracionScreen
+- [ ] Validaciones de formularios
+- [ ] Error handling
+- [ ] Loading states
+- [ ] Pull-to-refresh
+- [ ] Confirmaciones para acciones críticas
+- [ ] Testing en dispositivo real
+
+---
+
+## 🚦 COMENZAR AHORA
+
+**Primer paso:** Lee SAAI_oficial.txt sección "1.4 Estado y eliminación lógica" (entender diferencia entre estados de tienda vs entidades).
+
+**Segundo paso:** Revisa Postman collection módulo "10. TIENDAS (SAAI)".
+
+**Tercer paso:** Implementa LoginScreen + AuthContext (FASE 1).
+
+**Cuarto paso:** Implementa DashboardSAAIScreen con estadísticas globales (FASE 2).
+
+**Quinto paso:** Implementa RegistrarTiendaScreen (CRÍTICO - onboarding de clientes, FASE 3.5).
+
+**Pregunta clave:** ¿Entendiste que SAAI NO gestiona productos/ventas de tiendas individuales, solo administra tiendas a nivel global?
+
+---
+
+¡Empecemos! Esta es la app más simple de las 3, pero crítica para el onboarding de nuevos clientes. Dime cuando hayas leído los archivos de referencia y estés listo para implementar el DashboardSAAIScreen.

@@ -1,0 +1,513 @@
+# PROMPT PARA IA - FRONTEND SAAI ADMIN (React Native)
+
+## 🎯 CONTEXTO DEL PROYECTO
+
+Estoy desarrollando una aplicación móvil React Native para **ADMINISTRADORES DE TIENDA** del sistema SAAI (Smart Assistant for Inventory). Esta es la app más completa de las 3 del ecosistema.
+
+**Rol del usuario:** ADMINISTRADOR/ADMIN
+- Permisos COMPLETOS: Productos, ventas, usuarios, gastos, analítica, reportes, predicciones ML, notificaciones
+- Es el dueño de la tienda, tiene acceso total excepto gestión de otras tiendas
+
+**Backend:** AWS Serverless (API Gateway + Lambda + DynamoDB)
+- Autenticación: JWT (Bearer token)
+- Multi-tenant: Cada admin pertenece a UNA tienda (tenant_id en JWT)
+- WebSockets: Notificaciones y actualizaciones en tiempo real
+- S3: Descarga de reportes Excel
+- ML: Predicción de demanda con Holt-Winters
+
+---
+
+## 📚 ARCHIVOS DE REFERENCIA OBLIGATORIOS
+
+**IMPORTANTE:** Antes de escribir cualquier código, debes leer y entender completamente estos documentos:
+
+### 1. SAAI_oficial.txt
+- **Sección crítica:** "3. Arquitectura ADMINISTRADOR"
+  - 3.1 Endpoints (Request/Response) - Líneas 712-1310
+  - 3.2 Lambdas (qué hace cada una) - Líneas 1312-1750
+- **Convenciones del backend:** Líneas 1-80
+- **IMPORTANTE:** Leer sección de Analítica (ActualizarAnalitica es SOLO EventBridge, frontend usa VerAnalitica)
+
+### 2. SAAI_resumen_tecnico.txt
+- Arquitectura de Analítica y SNS
+- Predicciones ML (Holt-Winters, Docker Lambda)
+- Reportes en S3 con presigned URLs
+- WebSockets para eventos en tiempo real
+
+### 3. SAAI_Backend_Complete.postman_collection.json
+- **Módulos relevantes para ADMIN:**
+  - 1. AUTH → Login Admin
+  - 2. USUARIOS → CRUD completo
+  - 3. PRODUCTOS → CRUD completo
+  - 4. VENTAS → Registrar, listar, buscar
+  - 5. GASTOS → CRUD completo
+  - 6. ANALYTICS → Ver Analítica (NO actualizar manualmente)
+  - 7. REPORTES → Generar 4 tipos, listar historial
+  - 8. PREDICCIONES ML → Predecir demanda
+  - 9. NOTIFICACIONES → Listar
+
+---
+
+## 🏗️ ESTRUCTURA DE LA APP
+
+```
+saai-admin/
+├── src/
+│   ├── screens/
+│   │   ├── auth/
+│   │   │   └── LoginScreen.js
+│   │   ├── dashboard/
+│   │   │   └── DashboardScreen.js          # Vista general con KPIs
+│   │   ├── productos/
+│   │   │   ├── ListaProductosScreen.js
+│   │   │   ├── CrearProductoScreen.js
+│   │   │   ├── EditarProductoScreen.js
+│   │   │   └── BuscarProductosScreen.js
+│   │   ├── ventas/
+│   │   │   ├── RegistrarVentaScreen.js
+│   │   │   ├── ListaVentasScreen.js
+│   │   │   └── BuscarVentasScreen.js
+│   │   ├── usuarios/
+│   │   │   ├── ListaUsuariosScreen.js
+│   │   │   ├── CrearUsuarioScreen.js
+│   │   │   ├── EditarUsuarioScreen.js
+│   │   │   └── BuscarUsuariosScreen.js
+│   │   ├── gastos/
+│   │   │   ├── ListaGastosScreen.js
+│   │   │   ├── CrearGastoScreen.js
+│   │   │   ├── EditarGastoScreen.js
+│   │   │   └── BuscarGastosScreen.js
+│   │   ├── analitica/
+│   │   │   └── AnaliticaScreen.js          # Dashboard analítico
+│   │   ├── reportes/
+│   │   │   ├── GenerarReportesScreen.js
+│   │   │   └── HistorialReportesScreen.js
+│   │   ├── predicciones/
+│   │   │   └── PrediccionDemandaScreen.js
+│   │   └── notificaciones/
+│   │       └── NotificacionesScreen.js
+│   ├── components/
+│   │   ├── charts/                         # Gráficos para analítica
+│   │   │   ├── LineChart.js
+│   │   │   ├── BarChart.js
+│   │   │   └── PieChart.js
+│   │   ├── cards/
+│   │   │   ├── KPICard.js                  # Tarjetas de métricas
+│   │   │   ├── ProductCard.js
+│   │   │   ├── VentaCard.js
+│   │   │   ├── GastoCard.js
+│   │   │   └── UsuarioCard.js
+│   │   ├── AlertaBadge.js
+│   │   └── SearchBar.js
+│   ├── services/
+│   │   ├── api.js
+│   │   ├── auth.js
+│   │   ├── productos.js
+│   │   ├── ventas.js
+│   │   ├── usuarios.js
+│   │   ├── gastos.js
+│   │   ├── analitica.js
+│   │   ├── reportes.js
+│   │   ├── predicciones.js
+│   │   └── websocket.js
+│   ├── context/
+│   │   ├── AuthContext.js
+│   │   ├── AnaliticaContext.js            # Estado de analítica + WebSocket updates
+│   │   └── NotificationContext.js
+│   ├── navigation/
+│   │   ├── AppNavigator.js
+│   │   └── DrawerNavigator.js             # Drawer para módulos principales
+│   └── utils/
+│       ├── constants.js
+│       ├── helpers.js
+│       └── chartHelpers.js                # Helpers para formatear datos de gráficos
+└── App.js
+```
+
+---
+
+## 🚀 ORDEN DE IMPLEMENTACIÓN SUGERIDO
+
+### FASE 1: Autenticación y Navegación Base (COMENZAR AQUÍ)
+1. **LoginScreen + AuthContext**
+   - POST /login (admin)
+   - Guardar token + user info en AsyncStorage
+   - Navegación a DashboardScreen
+
+2. **API Service + Interceptors**
+   - Axios con Authorization header
+   - Error handling 401 → logout
+   - Error handling genérico
+
+3. **DrawerNavigator**
+   - Menú lateral con módulos: Dashboard, Productos, Ventas, Usuarios, Gastos, Analítica, Reportes, Predicciones, Notificaciones
+   - Header con nombre de tienda y logout
+
+### FASE 2: Productos + Ventas (Herencia de TRABAJADOR)
+4. **Módulo Productos** (igual que TRABAJADOR)
+   - ListaProductosScreen
+   - CrearProductoScreen
+   - EditarProductoScreen
+   - BuscarProductosScreen
+
+5. **Módulo Ventas** (igual que TRABAJADOR)
+   - RegistrarVentaScreen
+   - ListaVentasScreen
+   - BuscarVentasScreen
+
+### FASE 3: Usuarios (Exclusivo ADMIN)
+6. **ListaUsuariosScreen**
+   - GET /usuarios con paginación
+   - Mostrar: código, nombre, email, rol (admin/worker), estado
+
+7. **CrearUsuarioScreen**
+   - POST /usuarios
+   - Formulario: nombre, email, password, rol
+   - Validación de email único
+
+8. **EditarUsuarioScreen**
+   - PUT /usuarios/{codigo_usuario}
+   - Cambiar nombre, email, rol, estado
+   - NO cambiar password (feature separada)
+
+9. **BuscarUsuariosScreen**
+   - POST /usuarios/buscar
+   - Búsqueda por: nombre, email, código
+
+### FASE 4: Gastos (Exclusivo ADMIN)
+10. **ListaGastosScreen**
+    - GET /gastos con paginación
+    - Mostrar: código, descripción, monto, categoría, fecha
+    - Filtros por categoría y rango de fechas
+
+11. **CrearGastoScreen**
+    - POST /gastos
+    - Formulario: descripción, monto, categoría, fecha
+    - Categorías: FIJOS, VARIABLES, COMPRAS
+
+12. **EditarGastoScreen**
+    - PUT /gastos/{codigo_gasto}
+    - Editar monto, descripción, categoría
+
+13. **BuscarGastosScreen**
+    - POST /gastos/buscar
+    - Búsqueda por: descripción, categoría, fecha, monto
+
+### FASE 5: Dashboard y Analítica (CRÍTICO)
+14. **DashboardScreen**
+    - Tarjetas KPI: Total ventas hoy, ingresos del mes, productos sin stock, gastos del mes
+    - Gráfico de ventas (últimos 7 días)
+    - Alertas recientes (top 3)
+    - Botones rápidos: Registrar venta, Ver analítica, Generar reporte
+
+15. **AnaliticaScreen**
+    - GET /analitica?periodo=semana
+    - Tabs: Día, Semana (default), Mes
+    - **IMPORTANTE:** NO llamar ActualizarAnalitica (es automático cada 4h)
+    - WebSocket: Escuchar 'analitica_actualizada' → refetch datos
+    - Métricas:
+      - Ventas totales
+      - Ganancias brutas/netas
+      - Promedio de venta
+      - Productos más vendidos (top 5)
+      - Ventas diarias (gráfico de línea)
+      - Alertas:
+        - Ventas cero en periodo
+        - Ganancia baja (< 10% de ingresos)
+        - Productos sin stock
+        - Stock bajo (≤ 5 unidades)
+
+16. **Gráficos (react-native-chart-kit o Victory Native)**
+    - LineChart para ventas diarias
+    - BarChart para productos top
+    - PieChart para distribución de ventas por categoría
+
+### FASE 6: Reportes (Exclusivo ADMIN)
+17. **GenerarReportesScreen**
+    - 4 botones: Inventario, Ventas, Gastos, General
+    - Formulario para reportes de periodo (fecha_inicio, fecha_fin)
+    - POST /reportes/{tipo}
+    - Mostrar download_url generado
+    - Botón para abrir URL (Linking.openURL)
+
+18. **HistorialReportesScreen**
+    - GET /reportes/historial
+    - Lista de reportes generados
+    - Mostrar: código, tipo, fecha, tamaño
+    - Botón descargar en cada item
+    - **IMPORTANTE:** Los URLs son presigned (expiran en 1h), se regeneran en cada consulta
+
+### FASE 7: Predicciones ML (Exclusivo ADMIN)
+19. **PrediccionDemandaScreen**
+    - Selector de producto (dropdown o autocomplete)
+    - POST /predicciones con codigo_producto
+    - Mostrar:
+      - Demanda mañana (unidades)
+      - Demanda próxima semana (7 días)
+      - Stock actual vs demanda → alerta si stock < demanda
+    - Gráfico de predicción (7 días)
+    - Botón "Reabastecer" que navega a EditarProductoScreen con stock sugerido
+
+### FASE 8: Notificaciones y WebSocket (CRÍTICO)
+20. **NotificacionesScreen** (similar a TRABAJADOR pero con más tipos)
+    - GET /notificacion
+    - Tipos de alertas:
+      - stock_bajo, sin_stock
+      - venta_registrada
+      - ganancia_baja
+      - ventas_cero
+      - stockBajoManana, stockBajoProximaSemana (predicciones)
+    - Badge con contador de no leídas
+    - Severidad: INFO, WARNING, CRITICAL
+
+21. **WebSocket Service Completo**
+    - Conectar al login
+    - Eventos a escuchar:
+      - venta_registrada → refetch ventas + analítica
+      - analitica_actualizada → refetch analítica
+      - prediccion_generada → refetch predicción
+      - producto_actualizado → refetch productos
+    - Mostrar notificaciones push nativas
+    - Actualizar badge
+
+---
+
+## 💡 TIPS ESPECÍFICOS ADMIN
+
+### 1. Analítica - NO Actualizar Manualmente
+```javascript
+// ❌ INCORRECTO: Nunca llames a ActualizarAnalitica
+const actualizarAnalitica = () => api.post('/analitica'); // ❌ NO EXISTE ENDPOINT PÚBLICO
+
+// ✅ CORRECTO: Solo consulta analítica pre-calculada
+const fetchAnalitica = (periodo = 'semana') => {
+  return api.get('/analitica', { params: { periodo } });
+};
+
+// ✅ CORRECTO: Refetch cuando llega evento WebSocket
+ws.onmessage = (event) => {
+  const { event_type } = JSON.parse(event.data);
+  if (event_type === 'analitica_actualizada') {
+    fetchAnalitica(); // Re-consultar datos actualizados
+  }
+};
+```
+
+### 2. Reportes - Presigned URLs
+```javascript
+// ✅ CORRECTO: Generar reporte y abrir URL directamente
+const generarReporte = async (tipo, fechas) => {
+  const response = await api.post(`/reportes/${tipo}`, fechas);
+  const { download_url } = response.data.data;
+  
+  // Abrir el archivo Excel en navegador o descargar
+  Linking.openURL(download_url);
+};
+
+// ⚠️ IMPORTANTE: Los URLs expiran en 1 hora
+// En HistorialReportesScreen, el backend genera URLs frescos en cada GET /reportes/historial
+```
+
+### 3. Predicciones ML - Cache y TTL
+```javascript
+// ✅ Las predicciones tienen cache de 24h en backend
+// No es necesario guardarlas en frontend, siempre hacer POST /predicciones
+
+const predecirDemanda = async (codigo_producto) => {
+  const response = await api.post('/predicciones', { codigo_producto });
+  const { demanda_manana, demanda_proxima_semana } = response.data.data;
+  
+  // Comparar con stock actual
+  const producto = await api.get(`/productos/${codigo_producto}`);
+  const stockActual = producto.data.data.stock;
+  
+  if (stockActual < demanda_manana) {
+    Alert.alert('⚠️ Stock Bajo', 'El stock no es suficiente para mañana');
+  }
+};
+```
+
+### 4. Usuarios - Roles
+```javascript
+// Roles permitidos: 'admin' y 'worker'
+const crearUsuario = async (data) => {
+  const usuario = {
+    nombre: data.nombre,
+    email: data.email,
+    password: data.password,
+    rol: data.rol // 'admin' o 'worker'
+  };
+  
+  await api.post('/usuarios', usuario);
+};
+```
+
+### 5. Gastos - Categorías
+```javascript
+// Categorías fijas en backend
+const CATEGORIAS_GASTOS = [
+  'FIJOS',      // Alquiler, servicios, etc.
+  'VARIABLES',  // Mantenimiento, publicidad, etc.
+  'COMPRAS'     // Mercadería, insumos, etc.
+];
+
+// Usar en formulario CrearGastoScreen
+<Picker selectedValue={categoria} onValueChange={setCategoria}>
+  {CATEGORIAS_GASTOS.map(cat => (
+    <Picker.Item key={cat} label={cat} value={cat} />
+  ))}
+</Picker>
+```
+
+### 6. Dashboard - KPIs en Tiempo Real
+```javascript
+// Calcular KPIs localmente desde analítica
+const calcularKPIs = (analitica) => {
+  return {
+    ventasHoy: analitica.periodo.dia.ventas_totales,
+    ingresosHoy: analitica.periodo.dia.ingresos,
+    gananciaMes: analitica.periodo.mes.ganancia_neta,
+    productosSinStock: analitica.alertas.filter(a => a.tipo === 'sin_stock').length
+  };
+};
+
+// Actualizar dashboard cuando llega evento WebSocket
+useEffect(() => {
+  if (eventType === 'analitica_actualizada') {
+    fetchAnalitica().then(data => {
+      setKPIs(calcularKPIs(data));
+    });
+  }
+}, [eventType]);
+```
+
+### 7. Gráficos - Formatear Datos
+```javascript
+// Formatear ventas diarias para LineChart
+const formatearVentasDiarias = (ventasDiarias) => {
+  return {
+    labels: ventasDiarias.map(v => v.fecha.slice(5, 10)), // MM-DD
+    datasets: [{
+      data: ventasDiarias.map(v => v.total)
+    }]
+  };
+};
+
+// Usar en react-native-chart-kit
+<LineChart
+  data={formatearVentasDiarias(analitica.ventas_diarias)}
+  width={Dimensions.get('window').width - 40}
+  height={220}
+  chartConfig={{...}}
+/>
+```
+
+---
+
+## 📊 FEATURES EXCLUSIVAS ADMIN
+
+### Dashboard Ejecutivo
+- KPIs en tarjetas: ventas hoy, ingresos mes, productos sin stock, gastos mes
+- Gráfico de ventas (últimos 7 días)
+- Alertas recientes (top 3)
+- Accesos rápidos
+
+### Analítica Completa
+- 3 periodos: día, semana, mes
+- Métricas: ventas, ingresos, gastos, ganancias, promedio venta
+- Productos top vendidos
+- Gráfico de ventas diarias
+- Alertas automáticas (generadas cada 4h por EventBridge)
+
+### Reportes Excel
+- 4 tipos: Inventario, Ventas, Gastos, General
+- Descarga directa desde S3
+- Historial de reportes generados
+
+### Predicciones ML
+- Demanda predicha (mañana + 7 días)
+- Alertas de stock bajo según predicción
+- Sugerencias de reabastecimiento
+
+### Gestión de Usuarios
+- CRUD completo
+- Roles: admin y worker
+- Soft delete (estado INACTIVO)
+
+### Gestión de Gastos
+- CRUD completo
+- Categorías: FIJOS, VARIABLES, COMPRAS
+- Búsqueda y filtros avanzados
+
+---
+
+## ⚠️ ERRORES COMUNES A EVITAR
+
+1. **NO llames a ActualizarAnalitica** (endpoint no existe públicamente, solo EventBridge)
+2. **NO guardes reportes en local** (los URLs expiran, siempre refetch historial)
+3. **NO caches predicciones en frontend** (backend tiene cache de 24h, siempre POST)
+4. **NO permitas crear usuarios con rol 'saai'** (solo admin y worker)
+5. **NO permitas gastos con monto negativo**
+6. **NO muestres UUIDs** al usuario (solo códigos)
+7. **NO ignores eventos WebSocket** (actualiza UI en tiempo real)
+8. **NO uses categorías hardcodeadas** diferentes a las del backend
+
+---
+
+## 🎨 UI/UX RECOMENDACIONES
+
+1. **Navegación:** DrawerNavigator con 9 secciones principales
+2. **Dashboard:** Pantalla inicial con overview completo
+3. **Gráficos:** react-native-chart-kit o Victory Native
+4. **Colores:**
+   - Primary: #1E88E5 (azul)
+   - Success: #43A047 (verde)
+   - Warning: #FB8C00 (naranja)
+   - Danger: #E53935 (rojo)
+   - Info: #00ACC1 (cyan)
+5. **Icons:** MaterialCommunityIcons
+6. **Forms:** React Hook Form
+7. **Charts:** Victory Native o react-native-chart-kit
+8. **Notifications:** react-native-push-notification
+9. **File Download:** react-native-fs o Linking.openURL
+
+---
+
+## ✅ CHECKLIST DE IMPLEMENTACIÓN
+
+- [ ] LoginScreen + AuthContext
+- [ ] DrawerNavigator
+- [ ] DashboardScreen con KPIs
+- [ ] Módulo Productos completo
+- [ ] Módulo Ventas completo
+- [ ] Módulo Usuarios completo
+- [ ] Módulo Gastos completo
+- [ ] AnaliticaScreen con gráficos
+- [ ] WebSocket listener para 'analitica_actualizada'
+- [ ] GenerarReportesScreen (4 tipos)
+- [ ] HistorialReportesScreen
+- [ ] PrediccionDemandaScreen
+- [ ] NotificacionesScreen
+- [ ] WebSocket service completo
+- [ ] Error handling global
+- [ ] Loading states
+- [ ] Pull-to-refresh en listas
+- [ ] Testing en dispositivo real
+
+---
+
+## 🚦 COMENZAR AHORA
+
+**Primer paso:** Lee SAAI_oficial.txt sección "3. Arquitectura ADMINISTRADOR" completa (especialmente Analítica).
+
+**Segundo paso:** Revisa Postman collection módulos: AUTH, USUARIOS, GASTOS, ANALYTICS, REPORTES, PREDICCIONES.
+
+**Tercer paso:** Implementa LoginScreen + AuthContext + DrawerNavigator (FASE 1).
+
+**Cuarto paso:** Implementa DashboardScreen con KPIs básicos (FASE 5.14).
+
+**Pregunta clave:** ¿Entendiste que ActualizarAnalitica NO se llama desde frontend y que WebSocket notifica cuando hay datos nuevos?
+
+---
+
+¡Empecemos con el módulo más complejo! Dime cuando hayas leído los archivos de referencia y estés listo para implementar el DashboardScreen con analítica.
