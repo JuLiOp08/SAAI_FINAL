@@ -19,7 +19,7 @@ Estoy desarrollando una aplicación web React para **ADMINISTRADORES DE TIENDA**
 - Tailwind CSS para estilos (ya configurado en package.json)
 - React Router para navegación
 - Axios para llamadas API
-- Context API para estado global
+- Context API para estado global (almacenamiento con localStorage para persistencia)
 - Chart.js o Recharts para gráficos analíticos
 
 ---
@@ -162,67 +162,67 @@ saai-admin/
 ## 🚀 ORDEN DE IMPLEMENTACIÓN SUGERIDO
 
 ### FASE 1: Autenticación y Navegación Base (COMENZAR AQUÍ)
-1. **LoginScreen + AuthContext**
+1. **LoginPage + AuthContext**
    - POST /login (admin)
-   - Guardar token + user info en AsyncStorage
-   - Navegación a DashboardScreen
+   - Guardar token + user info en localStorage
+   - Navegación a DashboardPage
 
 2. **API Service + Interceptors**
    - Axios con Authorization header
    - Error handling 401 → logout
    - Error handling genérico
 
-3. **DrawerNavigator**
+3. **Sidebar + React Router**
    - Menú lateral con módulos: Dashboard, Productos, Ventas, Usuarios, Gastos, Analítica, Reportes, Predicciones, Notificaciones
    - Header con nombre de tienda y logout
 
 ### FASE 2: Productos + Ventas (Herencia de TRABAJADOR)
 4. **Módulo Productos** (igual que TRABAJADOR)
-   - ListaProductosScreen
-   - CrearProductoScreen
-   - EditarProductoScreen
-   - BuscarProductosScreen
+   - ListaProductosPage
+   - CrearProductoPage
+   - EditarProductoPage
+   - BuscarProductosPage
 
 5. **Módulo Ventas** (igual que TRABAJADOR)
-   - RegistrarVentaScreen
-   - ListaVentasScreen
-   - BuscarVentasScreen
+   - RegistrarVentaPage
+   - ListaVentasPage
+   - BuscarVentasPage
 
 ### FASE 3: Usuarios (Exclusivo ADMIN)
-6. **ListaUsuariosScreen**
+6. **ListaUsuariosPage**
    - GET /usuarios con paginación
    - Mostrar: código, nombre, email, rol (admin/worker), estado
 
-7. **CrearUsuarioScreen**
+7. **CrearUsuarioPage**
    - POST /usuarios
    - Formulario: nombre, email, password, rol
    - Validación de email único
 
-8. **EditarUsuarioScreen**
+8. **EditarUsuarioPage**
    - PUT /usuarios/{codigo_usuario}
    - Cambiar nombre, email, rol, estado
    - NO cambiar password (feature separada)
 
-9. **BuscarUsuariosScreen**
+9. **BuscarUsuariosPage**
    - POST /usuarios/buscar
    - Búsqueda por: nombre, email, código
 
 ### FASE 4: Gastos (Exclusivo ADMIN)
-10. **ListaGastosScreen**
+10. **ListaGastosPage**
     - GET /gastos con paginación
     - Mostrar: código, descripción, monto, categoría, fecha
     - Filtros por categoría y rango de fechas
 
-11. **CrearGastoScreen**
+11. **CrearGastoPage**
     - POST /gastos
     - Formulario: descripción, monto, categoría, fecha
     - Categorías: FIJOS, VARIABLES, COMPRAS
 
-12. **EditarGastoScreen**
+12. **EditarGastoPage**
     - PUT /gastos/{codigo_gasto}
     - Editar monto, descripción, categoría
 
-13. **BuscarGastosScreen**
+13. **BuscarGastosPage**
     - POST /gastos/buscar
     - Búsqueda por: descripción, categoría, fecha, monto
 
@@ -254,20 +254,20 @@ saai-admin/
       * Productos sin stock (CRITICAL)
       * Stock bajo ≤ 5 unidades (WARNING)
 
-16. **Gráficos (react-native-chart-kit o Victory Native)**
+16. **Gráficos (Chart.js o Recharts)**
     - LineChart para ventas diarias
     - BarChart para productos top
     - PieChart para distribución de ventas por categoría
 
 ### FASE 6: Reportes (Exclusivo ADMIN)
-17. **GenerarReportesScreen**
+17. **GenerarReportesPage**
     - 4 botones: Inventario, Ventas, Gastos, General
     - Formulario para reportes de periodo (fecha_inicio, fecha_fin)
     - POST /reportes/{tipo}
     - Mostrar download_url generado
-    - Botón para abrir URL (Linking.openURL)
+    - Botón para abrir URL (window.open o descarga automática con elemento <a>)
 
-18. **HistorialReportesScreen**
+18. **HistorialReportesPage**
     - GET /reportes/historial
     - Lista de reportes generados
     - Mostrar: código, tipo, fecha, tamaño
@@ -275,7 +275,7 @@ saai-admin/
     - **IMPORTANTE:** Los URLs son presigned (expiran en 1h), se regeneran en cada consulta
 
 ### FASE 7: Predicciones ML (Exclusivo ADMIN)
-19. **PrediccionDemandaScreen**
+19. **PrediccionDemandaPage**
     - Selector de producto (dropdown o autocomplete)
     - POST /predicciones con codigo_producto
     - Mostrar:
@@ -283,10 +283,10 @@ saai-admin/
       - Demanda próxima semana (7 días)
       - Stock actual vs demanda → alerta si stock < demanda
     - Gráfico de predicción (7 días)
-    - Botón "Reabastecer" que navega a EditarProductoScreen con stock sugerido
+    - Botón "Reabastecer" que navega a EditarProductoPage con stock sugerido
 
 ### FASE 8: Notificaciones y WebSocket (CRÍTICO)
-20. **NotificacionesScreen** (similar a TRABAJADOR pero con más tipos)
+20. **NotificacionesPage** (similar a TRABAJADOR pero con más tipos)
     - GET /notificacion
     - Tipos de alertas:
       - stock_bajo, sin_stock
@@ -399,7 +399,7 @@ const predecirDemanda = async (codigo_producto) => {
   const stockActual = producto.data.data.stock;
   
   if (stockActual < demanda_manana) {
-    Alert.alert('⚠️ Stock Bajo', 'El stock no es suficiente para mañana');
+    toast.warning('⚠️ Stock Bajo: El stock no es suficiente para mañana');
   }
 };
 ```
@@ -470,7 +470,7 @@ const formatearVentasDiarias = (ventasDiarias) => {
   };
 };
 
-// Usar en react-native-chart-kit
+// Usar en Chart.js o Recharts
 <LineChart
   data={formatearVentasDiarias(analitica.ventas_diarias)}
   width={Dimensions.get('window').width - 40}
@@ -672,24 +672,24 @@ const formatearVentasDiarias = (ventasDiarias) => {
 
 ## ✅ CHECKLIST DE IMPLEMENTACIÓN
 
-- [ ] LoginScreen + AuthContext
-- [ ] DrawerNavigator
-- [ ] DashboardScreen con KPIs
+- [ ] LoginPage + AuthContext
+- [ ] Sidebar + React Router
+- [ ] DashboardPage con KPIs
 - [ ] Módulo Productos completo
 - [ ] Módulo Ventas completo
 - [ ] Módulo Usuarios completo
 - [ ] Módulo Gastos completo
-- [ ] AnaliticaScreen con gráficos
+- [ ] AnaliticaPage con gráficos
 - [ ] WebSocket listener para 'analitica_actualizada'
-- [ ] GenerarReportesScreen (4 tipos)
-- [ ] HistorialReportesScreen
-- [ ] PrediccionDemandaScreen
-- [ ] NotificacionesScreen
+- [ ] GenerarReportesPage (4 tipos)
+- [ ] HistorialReportesPage
+- [ ] PrediccionDemandaPage
+- [ ] NotificacionesPage
 - [ ] WebSocket service completo
-- [ ] Error handling global
-- [ ] Loading states
-- [ ] Pull-to-refresh en listas
-- [ ] Testing en dispositivo real
+- [ ] Error handling global (react-hot-toast)
+- [ ] Loading states (spinners Tailwind)
+- [ ] Infinite scroll o botón Cargar más en listas
+- [ ] Testing en navegador (Chrome DevTools, responsive mode)
 
 ---
 
@@ -699,12 +699,12 @@ const formatearVentasDiarias = (ventasDiarias) => {
 
 **Segundo paso:** Revisa Postman collection módulos: AUTH, USUARIOS, GASTOS, ANALYTICS, REPORTES, PREDICCIONES.
 
-**Tercer paso:** Implementa LoginScreen + AuthContext + DrawerNavigator (FASE 1).
+**Tercer paso:** Implementa LoginPage + AuthContext + Sidebar (FASE 1).
 
-**Cuarto paso:** Implementa DashboardScreen con KPIs básicos (FASE 5.14).
+**Cuarto paso:** Implementa DashboardPage con KPIs básicos (FASE 5.14).
 
 **Pregunta clave:** ¿Entendiste que ActualizarAnalitica NO se llama desde frontend y que WebSocket notifica cuando hay datos nuevos?
 
 ---
 
-¡Empecemos con el módulo más complejo! Dime cuando hayas leído los archivos de referencia y estés listo para implementar el DashboardScreen con analítica.
+¡Empecemos con el módulo más complejo! Dime cuando hayas leído los archivos de referencia y estés listo para implementar el DashboardPage con analítica.

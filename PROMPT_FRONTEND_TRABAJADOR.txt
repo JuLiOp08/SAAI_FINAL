@@ -153,7 +153,7 @@ saai-trabajador/
    - Axios instance con baseURL
    - Interceptor request: agregar Authorization: Bearer {token} desde localStorage
    - Interceptor response: manejar errores 401 → logout automático + redirect a /login
-   - Interceptor response: extraer data.data de responses (estructura estándar backend)
+   - Mantener el response completo (no aplanar data.data automáticamente). Usar helper opcional getData(res) si es necesario para acceder a res.data.data
 
 ### FASE 2: Productos (Core Functionality)
 4. **ProductosPage**
@@ -171,18 +171,18 @@ saai-trabajador/
    - Categorías fijas: bebidas, snacks, abarrotes, limpieza, otros (select con Tailwind)
    - UI Tailwind: formulario con labels, inputs estilizados, botones primary/secondary
 
-6. **BuscarProductosScreen**
+6. **BuscarProductosPage**
    - POST /productos/buscar con query
    - SearchBar con debounce
    - Búsqueda por: nombre, código, categoría
 
-7. **EditarProductoScreen**
+7. **EditarProductoPage**
    - PUT /productos/{codigo_producto}
    - Pre-fill del formulario con datos actuales
    - Solo editar: precio, stock, descripción (nombre y categoría no se cambian)
 
 ### FASE 3: Ventas (Critical Feature)
-8. **RegistrarVentaScreen**
+8. **RegistrarVentaPage**
    - Selector de productos (múltiple)
    - Cantidad por producto
    - POST /ventas/calcular (preview del total SIN guardar)
@@ -190,35 +190,35 @@ saai-trabajador/
    - Selector de método de pago: efectivo, tarjeta, yape
    - Mostrar total calculado antes de confirmar
 
-9. **ListaVentasScreen**
+9. **ListaVentasPage**
    - GET /ventas con paginación
    - Mostrar: código, fecha, cliente, total, método pago
    - Filtros: fecha (hoy, esta semana, este mes)
 
-10. **BuscarVentasScreen**
+10. **BuscarVentasPage**
     - POST /ventas/buscar
     - Búsqueda por: código, fecha, método de pago, producto vendido
 
 ### FASE 4: Notificaciones y WebSocket
-11. **NotificacionesScreen**
+11. **NotificacionesPage**
     - GET /notificacion con paginación
     - Lista de alertas del sistema
     - Badge con contador de no leídas
 
 12. **WebSocket Service**
-    - Conectar a WebSocket API al login
+    - Conectar a WebSocket API al login usando el formato EXACTO documentado en SAAI_oficial.txt y Postman (wss://...?token=JWT)
     - Escuchar eventos: venta_registrada, producto_actualizado
     - Mostrar notificaciones push nativas
     - Actualizar badge de notificaciones
 
 ### FASE 5: Pulido y UX
 13. **Mejoras generales**
-    - Loading states (ActivityIndicator)
-    - Error handling (Toast/Alert)
+    - Loading states (spinner de Tailwind o biblioteca como react-loader-spinner)
+    - Error handling (react-hot-toast para mensajes)
     - Validaciones de formularios
-    - Confirmaciones antes de eliminar
-    - Pull-to-refresh en todas las listas
-    - Infinite scroll en listas paginadas
+    - Confirmaciones antes de eliminar (diálogo personalizado o biblioteca como react-modal)
+    - Botón "Cargar más" o infinite scroll en listas paginadas
+    - Web Notifications API (opcional, si el usuario da permiso del navegador)
 
 ---
 
@@ -370,7 +370,7 @@ const validarProducto = (data) => {
   if (!data.precio || data.precio <= 0) {
     errors.precio = 'Precio debe ser mayor a 0';
   }
-  if (!data.stock || data.stock < 0) {
+  if (data.stock === '' || data.stock === null || data.stock === undefined || data.stock < 0) {
     errors.stock = 'Stock no puede ser negativo';
   }
   
@@ -383,11 +383,11 @@ const validarProducto = (data) => {
 // Manejar errores de API consistentemente
 try {
   const response = await api.post('/productos', data);
-  Alert.alert('Éxito', 'Producto creado correctamente');
-  navigation.goBack();
+  toast.success('Producto creado correctamente');
+  navigate(-1); // o navigate('/productos')
 } catch (error) {
   const mensaje = error.response?.data?.message || 'Error al crear producto';
-  Alert.alert('Error', mensaje);
+  toast.error(mensaje);
 }
 ```
 
@@ -562,7 +562,7 @@ VITE_WS_URL=wss://xxx.execute-api.us-east-1.amazonaws.com/dev
 ```
 
 ```javascript
-// tailwind.config.js (ya debería existir)
+// tailwind.config.js (crear si no existe)
 module.exports = {
   content: [
     "./index.html",
@@ -590,22 +590,22 @@ module.exports = {
 
 Usa este checklist para trackear progreso:
 
-- [ ] LoginScreen + AuthContext
+- [ ] LoginPage + AuthContext
 - [ ] API Service con interceptors
-- [ ] Navegación principal (BottomTabs)
-- [ ] ListaProductosScreen con paginación
-- [ ] CrearProductoScreen con validaciones
-- [ ] EditarProductoScreen
-- [ ] BuscarProductosScreen
-- [ ] RegistrarVentaScreen con cálculo previo
-- [ ] ListaVentasScreen
-- [ ] BuscarVentasScreen
-- [ ] NotificacionesScreen
+- [ ] Navegación principal (React Router con Sidebar o Navbar)
+- [ ] ListaProductosPage con paginación
+- [ ] CrearProductoPage con validaciones
+- [ ] EditarProductoPage
+- [ ] BuscarProductosPage
+- [ ] RegistrarVentaPage con cálculo previo
+- [ ] ListaVentasPage
+- [ ] BuscarVentasPage
+- [ ] NotificacionesPage
 - [ ] WebSocket service
-- [ ] Error handling global
-- [ ] Loading states
-- [ ] Pull-to-refresh
-- [ ] Testing en dispositivo real
+- [ ] Error handling global (react-hot-toast)
+- [ ] Loading states (spinners Tailwind)
+- [ ] Infinite scroll o botón Cargar más
+- [ ] Testing en navegador (Chrome DevTools, responsive mode)
 
 ---
 
@@ -613,12 +613,12 @@ Usa este checklist para trackear progreso:
 
 **Primer paso:** Lee SAAI_oficial.txt sección "2. Arquitectura TRABAJADOR" completa.
 
-**Segundo paso:** Revisa la estructura de carpetas de la plantilla React Native.
+**Segundo paso:** Revisa la estructura de carpetas de la plantilla React + Vite con Tailwind CSS.
 
-**Tercer paso:** Implementa LoginScreen + AuthContext (FASE 1.1 y 1.2).
+**Tercer paso:** Implementa LoginPage + AuthContext (FASE 1.1 y 1.2).
 
 **Pregunta antes de continuar:** ¿Entendiste el flujo de autenticación y cómo se usa el JWT en todas las requests?
 
 ---
 
-¡Empecemos! Dime cuando hayas leído los archivos de referencia y estés listo para implementar el LoginScreen.
+¡Empecemos! Dime cuando hayas leído los archivos de referencia y estés listo para implementar el LoginPage.

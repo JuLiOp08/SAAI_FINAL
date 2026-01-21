@@ -137,7 +137,7 @@ saai-plataforma/
    - Interceptor response: manejo 401 → logout + redirect /login
 
 ### FASE 2: Dashboard Global (Vista Principal)
-4. **DashboardSAAIScreen**
+4. **DashboardSAAIPage**
    - GET /tiendas (sin filtros, todas las tiendas)
    - Cards con estadísticas:
      - Total tiendas
@@ -170,12 +170,12 @@ saai-plataforma/
    - Mostrar código de tienda generado en modal de éxito
    - Botón "Copiar Código" (clipboard)
 
-6. **ListaTiendasScreen**
+6. **ListaTiendasPage**
    - GET /tiendas con paginación
    - Filtros por estado (tabs): Todas, Activas, Suspendidas, Eliminadas
-   - FlatList con TiendaCard
-   - Pull-to-refresh
-   - Navegación a DetalleTiendaScreen
+   - Lista con TiendaCard
+   - Botón "Cargar más" o infinite scroll
+   - Navegación a DetalleTiendaPage
 
 7. **TiendaCard Component**
    - Mostrar:
@@ -184,7 +184,7 @@ saai-plataforma/
      - email_tienda
      - estado (badge con color)
      - fecha_creacion
-   - Tocar → navegar a DetalleTiendaScreen
+   - Tocar → navegar a DetalleTiendaPage
 
 8. **DetalleTiendaPage**
    - Mostrar info completa de la tienda
@@ -273,15 +273,15 @@ const TRANSICIONES_ESTADO = {
 const cambiarEstado = async (codigo_tienda, estadoActual, nuevoEstado) => {
   // Validar transición
   if (!TRANSICIONES_ESTADO[estadoActual].includes(nuevoEstado)) {
-    Alert.alert('Error', 'Transición de estado no permitida');
+    toast.error('Transición de estado no permitida');
     return;
   }
   
-  // Confirmación para ELIMINADA
+  // Confirmación para ELIMINADA (usar react-modal o confirmación personalizada)
   if (nuevoEstado === 'ELIMINADA') {
-    Alert.alert(
-      '⚠️ Eliminar Tienda',
-      'Esta acción no se puede deshacer. La tienda no podrá operar pero sus datos se conservarán.',
+    const confirmado = window.confirm(
+      '⚠️ Eliminar Tienda\n\nEsta acción no se puede deshacer. La tienda no podrá operar pero sus datos se conservarán.'
+    );
       [
         { text: 'Cancelar', style: 'cancel' },
         { 
@@ -354,7 +354,7 @@ const calcularEstadisticas = (tiendas) => {
 };
 
 // Dashboard
-const DashboardSAAIScreen = () => {
+const DashboardSAAIPage = () => {
   const [stats, setStats] = useState({ total: 0, activas: 0, suspendidas: 0, eliminadas: 0 });
   
   useEffect(() => {
@@ -406,11 +406,11 @@ const registrarTienda = async (data) => {
       const mensaje = error.response.data.message;
       
       if (mensaje.includes('email ya existe')) {
-        Alert.alert('Error', 'El email de la tienda ya está registrado');
+        toast.error('El email de la tienda ya está registrado');
       } else if (mensaje.includes('admin email ya existe')) {
-        Alert.alert('Error', 'El email del administrador ya está en uso');
+        toast.error('El email del administrador ya está en uso');
       } else {
-        Alert.alert('Error', mensaje);
+        toast.error(mensaje);
       }
     }
   }
@@ -478,22 +478,22 @@ const registrarTienda = async (data) => {
 
 ## ✅ CHECKLIST DE IMPLEMENTACIÓN
 
-- [ ] LoginScreen + AuthContext
+- [ ] LoginPage + AuthContext
 - [ ] API Service con interceptors
-- [ ] DashboardSAAIScreen con estadísticas
-- [ ] RegistrarTiendaScreen (2 secciones: tienda + admin)
-- [ ] ListaTiendasScreen con filtros por estado
+- [ ] DashboardSAAIPage con estadísticas
+- [ ] RegistrarTiendaPage (2 secciones: tienda + admin)
+- [ ] ListaTiendasPage con filtros por estado
 - [ ] TiendaCard component con badge
-- [ ] DetalleTiendaScreen con cambio de estado
+- [ ] DetalleTiendaPage con cambio de estado
 - [ ] EstadoBadge component
-- [ ] BuscarTiendasScreen
-- [ ] ConfiguracionScreen
+- [ ] BuscarTiendasPage
+- [ ] ConfiguracionPage
 - [ ] Validaciones de formularios
-- [ ] Error handling
-- [ ] Loading states
-- [ ] Pull-to-refresh
-- [ ] Confirmaciones para acciones críticas
-- [ ] Testing en dispositivo real
+- [ ] Error handling (react-hot-toast)
+- [ ] Loading states (spinners Tailwind)
+- [ ] Infinite scroll o botón Cargar más
+- [ ] Confirmaciones para acciones críticas (react-modal o window.confirm)
+- [ ] Testing en navegador (Chrome DevTools, responsive mode)
 
 ---
 
