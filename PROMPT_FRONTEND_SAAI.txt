@@ -1,19 +1,25 @@
-# PROMPT PARA IA - FRONTEND SAAI PLATAFORMA (React Native)
+# PROMPT PARA IA - FRONTEND SAAI PLATAFORMA (React Web)
 
 ## 🎯 CONTEXTO DEL PROYECTO
 
-Estoy desarrollando una aplicación móvil React Native para **SUPER ADMINISTRADORES** de la plataforma SAAI (Smart Assistant for Inventory). Esta app gestiona TODAS las tiendas del sistema.
+Estoy desarrollando una aplicación web React para **SUPER ADMINISTRADORES** de la plataforma SAAI (Smart Assistant for Inventory). Esta app gestiona TODAS las tiendas del sistema.
 
 **Rol del usuario:** SAAI (Super Admin)
 - Permisos: Gestión global de tiendas, registro de nuevas tiendas, consulta de analítica multi-tenant
 - NO gestiona productos, ventas, usuarios de tiendas individuales (eso es rol ADMIN)
-- Enfoque: Administración de la plataforma, onboarding de clientes
+- Enfoque: Administración de la plataforma, onboarding de clientes, monitoreo global
 
 **Backend:** AWS Serverless (API Gateway + Lambda + DynamoDB)
 - Autenticación: JWT (Bearer token) con rol 'saai'
-- Multi-tenant: Puede ver/gestionar TODAS las tiendas (tenant_id = 'SAAI' para queries globales)
-- SNS: Publica eventos BienvenidaSAAI al registrar tienda
-- S3: Crea carpetas automáticamente para cada tienda
+- Multi-tenant: SAAI puede ver/gestionar TODAS las tiendas (NO tiene tenant_id específico, es global)
+- SNS: Publica eventos BienvenidaSAAI al registrar tienda → crea recursos automáticamente
+- S3: Crea carpetas automáticamente para cada tienda (s3://saai-tiendas/{codigo_tienda}/)
+
+**Frontend:** React + Vite + Tailwind CSS
+- Tailwind CSS para estilos (ya configurado en package.json)
+- React Router para navegación
+- Axios para llamadas API
+- Context API para estado global
 
 ---
 
@@ -51,37 +57,60 @@ Estoy desarrollando una aplicación móvil React Native para **SUPER ADMINISTRAD
 ```
 saai-plataforma/
 ├── src/
-│   ├── screens/
+│   ├── pages/
 │   │   ├── auth/
-│   │   │   └── LoginScreen.js
+│   │   │   └── LoginPage.jsx
 │   │   ├── dashboard/
-│   │   │   └── DashboardSAAIScreen.js      # Vista global de tiendas
+│   │   │   └── DashboardSAAIPage.jsx      # Vista global de tiendas
 │   │   ├── tiendas/
-│   │   │   ├── ListaTiendasScreen.js       # Todas las tiendas
-│   │   │   ├── RegistrarTiendaScreen.js    # Onboarding de cliente
-│   │   │   ├── DetalleTiendaScreen.js      # Info + cambiar estado
-│   │   │   └── BuscarTiendasScreen.js
+│   │   │   ├── TiendasPage.jsx             # Lista todas las tiendas
+│   │   │   ├── RegistrarTiendaPage.jsx     # Onboarding cliente
+│   │   │   ├── DetalleTiendaPage.jsx       # Info + cambiar estado
+│   │   │   └── BuscarTiendasPage.jsx
 │   │   └── configuracion/
-│   │       └── ConfiguracionScreen.js      # Settings de la plataforma
+│   │       └── ConfiguracionPage.jsx       # Settings plataforma
 │   ├── components/
-│   │   ├── TiendaCard.js                   # Card con info de tienda + badge estado
-│   │   ├── EstadoBadge.js                  # Badge: ACTIVA (verde), SUSPENDIDA (naranja), ELIMINADA (rojo)
-│   │   ├── StatsCard.js                    # Tarjeta con estadísticas globales
-│   │   └── SearchBar.js
+│   │   ├── layout/
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   └── Layout.jsx
+│   │   ├── ui/
+│   │   │   ├── Button.jsx
+│   │   │   ├── Input.jsx
+│   │   │   ├── Modal.jsx
+│   │   │   ├── Table.jsx
+│   │   │   ├── Card.jsx
+│   │   │   ├── Badge.jsx
+│   │   │   ├── SearchBar.jsx
+│   │   │   └── Spinner.jsx
+│   │   ├── tiendas/
+│   │   │   ├── TiendaCard.jsx              # Card con estado badge
+│   │   │   ├── TiendaForm.jsx              # Formulario registro
+│   │   │   ├── EstadoBadge.jsx             # ACTIVA/SUSPENDIDA/ELIMINADA
+│   │   │   └── TiendaTable.jsx
+│   │   └── dashboard/
+│   │       ├── StatsCard.jsx               # Cards estadísticas globales
+│   │       └── TiendaRecenteCard.jsx
 │   ├── services/
 │   │   ├── api.js
-│   │   ├── auth.js
-│   │   └── tiendas.js                      # CRUD tiendas
+│   │   ├── auth.service.js
+│   │   └── tiendas.service.js          # CRUD tiendas
 │   ├── context/
-│   │   ├── AuthContext.js
-│   │   └── TiendasContext.js               # Estado global de tiendas
-│   ├── navigation/
-│   │   ├── AppNavigator.js
-│   │   └── StackNavigator.js
-│   └── utils/
-│       ├── constants.js
-│       └── helpers.js
-└── App.js
+│   │   ├── AuthContext.jsx
+│   │   └── TiendasContext.jsx          # Estado global tiendas
+│   ├── hooks/
+│   │   ├── useAuth.js
+│   │   └── usePagination.js
+│   ├── utils/
+│   │   ├── constants.js
+│   │   └── helpers.js
+│   ├── routes/
+│   │   ├── AppRoutes.jsx
+│   │   └── ProtectedRoute.jsx
+│   └── App.jsx
+├── tailwind.config.js
+├── vite.config.js
+└── package.json
 ```
 
 ---
@@ -89,21 +118,23 @@ saai-plataforma/
 ## 🚀 ORDEN DE IMPLEMENTACIÓN SUGERIDO
 
 ### FASE 1: Autenticación (COMENZAR AQUÍ)
-1. **LoginScreen**
+1. **LoginPage**
    - POST /login con email: saai@saai.com, password: admin123
-   - Guardar token en AsyncStorage
+   - Guardar token en localStorage (NO AsyncStorage, esto es web)
    - Verificar rol === 'saai' en el response
-   - Navegación a DashboardSAAIScreen
+   - **IMPORTANTE:** SAAI NO tiene tenant_id (es super admin global)
+   - Navegación a DashboardSAAIPage
 
 2. **AuthContext**
    - Estado: { user, token, isSAAI: true, isAuthenticated }
+   - **NO incluir tenant_id** (SAAI es global, no pertenece a una tienda)
    - login(), logout(), checkAuth()
-   - Persistencia de sesión
+   - Persistencia de sesión en localStorage
 
 3. **API Service**
    - Axios con baseURL
-   - Interceptor Authorization: Bearer {token}
-   - Error handling 401
+   - Interceptor request: Authorization: Bearer {token}
+   - Interceptor response: manejo 401 → logout + redirect /login
 
 ### FASE 2: Dashboard Global (Vista Principal)
 4. **DashboardSAAIScreen**
@@ -117,7 +148,7 @@ saai-plataforma/
    - Lista resumida de tiendas recientes (últimas 5)
 
 ### FASE 3: Gestión de Tiendas (Core Feature)
-5. **RegistrarTiendaScreen** (CRÍTICO - Onboarding de clientes)
+5. **RegistrarTiendaPage** (CRÍTICO - Onboarding de clientes)
    - Formulario en 2 secciones:
      - **Datos de Tienda:**
        - nombre_tienda (requerido)
@@ -127,14 +158,17 @@ saai-plataforma/
        - nombre (requerido)
        - email (requerido, único)
        - password (requerido, min 6 caracteres)
-   - POST /tiendas
-   - **IMPORTANTE:** Backend automáticamente:
-     - Genera codigo_tienda (T001, T002, T003...)
-     - Crea admin inicial con rol 'admin'
-     - Publica SNS BienvenidaSAAI → crea carpeta S3 + suscripción alertas
-     - Envía email de bienvenida
-   - Mostrar código de tienda generado en success modal
-   - Copiar código al clipboard
+   - POST /tiendas (body NO incluye codigo_tienda, el backend lo genera)
+   - **IMPORTANTE - Backend hace TODO automáticamente:**
+     1. Genera codigo_tienda (T001, T002, T003...)
+     2. Crea usuario admin inicial con rol 'admin'
+     3. Publica SNS BienvenidaSAAI
+     4. Lambda CrearRecursosTienda crea:
+        - Carpeta S3: s3://saai-tiendas/{codigo_tienda}/
+        - Suscripción SNS AlertasSAAI con filtro tenant_id
+     5. Lambda EnviarCorreoBienvenida envía email con credenciales
+   - Mostrar código de tienda generado en modal de éxito
+   - Botón "Copiar Código" (clipboard)
 
 6. **ListaTiendasScreen**
    - GET /tiendas con paginación
@@ -152,7 +186,7 @@ saai-plataforma/
      - fecha_creacion
    - Tocar → navegar a DetalleTiendaScreen
 
-8. **DetalleTiendaScreen**
+8. **DetalleTiendaPage**
    - Mostrar info completa de la tienda
    - **Cambiar Estado:**
      - ACTIVA → SUSPENDIDA (botón "Suspender")
@@ -166,14 +200,14 @@ saai-plataforma/
    - Mostrar fecha de creación
    - Botón "Editar" → solo nombre, teléfono, email_tienda
 
-9. **BuscarTiendasScreen**
+9. **BuscarTiendasPage**
    - POST /tiendas/buscar
    - SearchBar con query
    - Búsqueda por: nombre_tienda, codigo_tienda, email_tienda
-   - Resultados en FlatList
+   - Resultados en tabla/grid
 
 ### FASE 4: Configuración
-10. **ConfiguracionScreen**
+10. **ConfiguracionPage**
     - Información del usuario SAAI
     - Logout
     - Versión de la app
@@ -183,7 +217,7 @@ saai-plataforma/
 
 ## 💡 TIPS ESPECÍFICOS SAAI
 
-### 1. Registro de Tienda - Proceso Completo
+### 1. Registro de Tienda - Proceso Completo (Según SAAI_oficial.txt sección 1.4)
 ```javascript
 // ✅ CORRECTO: Backend hace TODO automáticamente
 const registrarTienda = async (data) => {
@@ -196,30 +230,36 @@ const registrarTienda = async (data) => {
       email: data.adminEmail,
       password: data.adminPassword
     }
+    // ❌ NO envías codigo_tienda, el backend lo genera
   };
   
   const response = await api.post('/tiendas', payload);
   const { codigo_tienda, nombre_tienda } = response.data.data;
   
-  // Mostrar modal de éxito con código generado
-  Alert.alert(
-    '🎉 Tienda Registrada',
-    `Código: ${codigo_tienda}\nNombre: ${nombre_tienda}\n\nSe ha enviado un email de bienvenida al administrador.`,
-    [
-      { text: 'Copiar Código', onPress: () => Clipboard.setString(codigo_tienda) },
-      { text: 'OK' }
-    ]
-  );
+  // Copiar código al clipboard (Web API)
+  await navigator.clipboard.writeText(codigo_tienda);
+  
+  // Mostrar modal de éxito
+  setShowSuccessModal({
+    codigo: codigo_tienda,
+    nombre: nombre_tienda,
+    message: 'Se ha enviado un email de bienvenida al administrador.'
+  });
 };
 
 // ⚠️ Lo que hace el backend automáticamente:
-// 1. Genera codigo_tienda (T001, T002, T003...)
-// 2. Crea usuario admin con rol 'admin'
-// 3. Publica SNS BienvenidaSAAI
-// 4. Lambda CrearRecursosTienda crea:
-//    - Carpeta S3: s3://saai-tiendas/{codigo_tienda}/
-//    - Suscripción SNS AlertasSAAI con filtro tenant_id
-// 5. Lambda EnviarCorreoBienvenida envía email con credenciales
+// 1. Genera codigo_tienda usando t_counters (T001, T002, T003...)
+// 2. Crea usuario admin con rol 'admin' en t_usuarios
+// 3. Guarda tienda con estado 'ACTIVA' en t_tiendas
+// 4. Publica SNS BienvenidaSAAI con payload:
+//    { codigo_tienda, nombre_tienda, email_tienda, admin_email }
+// 5. Lambda CrearRecursosTienda (subscriptor SNS):
+//    - Crea carpeta S3: s3://saai-tiendas/{codigo_tienda}/
+//    - Crea carpeta S3: s3://saai-tiendas/{codigo_tienda}/reportes/
+//    - Crea suscripción SNS Email a AlertasSAAI con FilterPolicy:
+//      { "tenant_id": [codigo_tienda] }
+// 6. Lambda EnviarCorreoBienvenida (subscriptor SNS):
+//    - Envía email al admin_email con credenciales de acceso
 ```
 
 ### 2. Estados de Tienda - Transiciones Permitidas
@@ -423,24 +463,16 @@ const registrarTienda = async (data) => {
 
 ---
 
-## 🎨 UI/UX RECOMENDACIONES
+## 🎨 UI/UX RECOMENDACIONES CON TAILWIND CSS
 
-1. **Navegación:** StackNavigator simple
-   - Dashboard → Lista Tiendas → Detalle Tienda
-   - Dashboard → Registrar Tienda
-2. **Colores por Estado:**
-   - ACTIVA: Verde (#43A047)
-   - SUSPENDIDA: Naranja (#FB8C00)
-   - ELIMINADA: Rojo (#E53935)
-3. **Icons:** MaterialCommunityIcons
-   - store: Tiendas
-   - plus-circle: Registrar
-   - magnify: Buscar
-   - cog: Configuración
-4. **Cards:** TiendaCard con badge de estado prominente
-5. **Stats:** Cards grandes con números grandes (Dashboard)
-6. **Confirmaciones:** Alert para acciones destructivas (eliminar, suspender)
-7. **Success Modals:** Mostrar código de tienda generado con opción de copiar
+1. **Layout:** Navbar + Sidebar + Contenido principal
+2. **Dashboard:** Stats Cards responsive con Tailwind
+3. **TiendaCard:** Grid de cards con hover effects
+4. **Badges de Estado:** ACTIVA (verde), SUSPENDIDA (amarillo), ELIMINADA (rojo)
+5. **Modal Success:** Código de tienda grande, botón copiar (clipboard API)
+6. **Tabs:** Filtros por estado (Todas/Activas/Suspendidas/Eliminadas)
+7. **Formulario:** 2 secciones claras (Tienda + Admin)
+8. **Colors:** Tailwind utility classes (bg-green-100, text-red-800, etc.)
 
 ---
 

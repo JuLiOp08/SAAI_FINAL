@@ -1,17 +1,23 @@
-# PROMPT PARA IA - FRONTEND SAAI TRABAJADOR (React Native)
+# PROMPT PARA IA - FRONTEND SAAI TRABAJADOR (React Web)
 
 ## 🎯 CONTEXTO DEL PROYECTO
 
-Estoy desarrollando una aplicación móvil React Native para **TRABAJADORES DE TIENDA** del sistema SAAI (Smart Assistant for Inventory). Esta es 1 de 3 aplicaciones del ecosistema.
+Estoy desarrollando una aplicación web React para **TRABAJADORES DE TIENDA** del sistema SAAI (Smart Assistant for Inventory). Esta es 1 de 3 aplicaciones del ecosistema.
 
 **Rol del usuario:** TRABAJADOR/WORKER
 - Permisos: Gestión de productos, registro de ventas, consulta de notificaciones
 - Sin acceso a: Gastos, analítica, reportes, usuarios, predicciones ML
 
 **Backend:** AWS Serverless (API Gateway + Lambda + DynamoDB)
-- Autenticación: JWT (Bearer token)
-- Multi-tenant: Cada trabajador pertenece a UNA tienda (tenant_id en JWT)
+- Autenticación: JWT (Bearer token) - el token se envía en CADA request
+- Multi-tenant: Cada trabajador pertenece a UNA tienda (tenant_id extraído del JWT por el backend)
 - WebSockets: Notificaciones en tiempo real
+
+**Frontend:** React + Vite + Tailwind CSS
+- Tailwind CSS para estilos (ya configurado en package.json)
+- React Router para navegación
+- Axios para llamadas API
+- Context API para estado global
 
 ---
 
@@ -53,46 +59,74 @@ Estoy desarrollando una aplicación móvil React Native para **TRABAJADORES DE T
 
 ## 🏗️ ESTRUCTURA DE LA APP
 
-**Revisa la plantilla React Native que he creado** antes de empezar. La estructura debe ser:
+**Revisa la plantilla React + Vite que he creado** antes de empezar. La estructura debe ser:
 
 ```
 saai-trabajador/
 ├── src/
-│   ├── screens/          # Pantallas principales
+│   ├── pages/            # Páginas principales (rutas)
 │   │   ├── auth/
-│   │   │   └── LoginScreen.js
+│   │   │   └── LoginPage.jsx
 │   │   ├── productos/
-│   │   │   ├── ListaProductosScreen.js
-│   │   │   ├── CrearProductoScreen.js
-│   │   │   ├── EditarProductoScreen.js
-│   │   │   └── BuscarProductosScreen.js
+│   │   │   ├── ProductosPage.jsx          # Lista + crear
+│   │   │   ├── EditarProductoPage.jsx
+│   │   │   └── BuscarProductosPage.jsx
 │   │   ├── ventas/
-│   │   │   ├── RegistrarVentaScreen.js
-│   │   │   ├── ListaVentasScreen.js
-│   │   │   └── BuscarVentasScreen.js
-│   │   └── notificaciones/
-│   │       └── NotificacionesScreen.js
+│   │   │   ├── RegistrarVentaPage.jsx
+│   │   │   ├── VentasPage.jsx             # Lista + buscar
+│   │   │   └── BuscarVentasPage.jsx
+│   │   ├── notificaciones/
+│   │   │   └── NotificacionesPage.jsx
+│   │   └── HomePage.jsx                   # Dashboard simple
 │   ├── components/       # Componentes reutilizables
-│   │   ├── ProductCard.js
-│   │   ├── VentaCard.js
-│   │   ├── NotificationBadge.js
-│   │   └── SearchBar.js
+│   │   ├── layout/
+│   │   │   ├── Navbar.jsx                 # Navegación superior
+│   │   │   ├── Sidebar.jsx                # Menú lateral
+│   │   │   └── Layout.jsx                 # Wrapper con Navbar + Sidebar
+│   │   ├── ui/                            # Componentes UI base
+│   │   │   ├── Button.jsx                 # Botón con Tailwind
+│   │   │   ├── Input.jsx                  # Input con Tailwind
+│   │   │   ├── Modal.jsx
+│   │   │   ├── Table.jsx
+│   │   │   ├── Card.jsx
+│   │   │   ├── Badge.jsx
+│   │   │   ├── SearchBar.jsx
+│   │   │   └── Spinner.jsx                # Loading spinner
+│   │   ├── productos/
+│   │   │   ├── ProductCard.jsx
+│   │   │   ├── ProductForm.jsx
+│   │   │   └── ProductTable.jsx
+│   │   ├── ventas/
+│   │   │   ├── VentaCard.jsx
+│   │   │   ├── VentaForm.jsx
+│   │   │   └── CarritoVenta.jsx           # Carrito para registrar venta
+│   │   └── notificaciones/
+│   │       ├── NotificationBadge.jsx
+│   │       └── NotificationList.jsx
 │   ├── services/         # Lógica de API y WebSocket
-│   │   ├── api.js       # Axios instance con interceptors
-│   │   ├── auth.js      # Login, logout, token management
-│   │   ├── productos.js # CRUD productos
-│   │   ├── ventas.js    # Registrar/listar ventas
-│   │   └── websocket.js # WebSocket connection
-│   ├── context/          # Estado global (Context API o Redux)
-│   │   ├── AuthContext.js
-│   │   └── NotificationContext.js
-│   ├── navigation/       # React Navigation
-│   │   ├── AppNavigator.js
-│   │   └── AuthNavigator.js
-│   └── utils/
-│       ├── constants.js  # API_URL, categorías, métodos pago
-│       └── helpers.js    # Formateo de fecha, moneda
-└── App.js
+│   │   ├── api.js        # Axios instance con interceptors
+│   │   ├── auth.service.js      # Login, logout, token management
+│   │   ├── productos.service.js # CRUD productos
+│   │   ├── ventas.service.js    # Registrar/listar ventas
+│   │   └── websocket.service.js # WebSocket connection
+│   ├── context/          # Estado global (Context API)
+│   │   ├── AuthContext.jsx
+│   │   └── NotificationContext.jsx
+│   ├── hooks/            # Custom hooks
+│   │   ├── useAuth.js
+│   │   ├── useWebSocket.js
+│   │   └── usePagination.js
+│   ├── utils/
+│   │   ├── constants.js  # API_URL, categorías, métodos pago
+│   │   └── helpers.js    # Formateo de fecha, moneda, validaciones
+│   ├── routes/
+│   │   ├── AppRoutes.jsx # Rutas protegidas (requieren auth)
+│   │   └── ProtectedRoute.jsx # HOC para rutas privadas
+│   └── App.jsx           # Router + AuthProvider
+├── index.html
+├── tailwind.config.js    # Configuración de Tailwind
+├── vite.config.js
+└── package.json          # Incluye Tailwind CSS
 ```
 
 ---
@@ -100,34 +134,42 @@ saai-trabajador/
 ## 🚀 ORDEN DE IMPLEMENTACIÓN SUGERIDO
 
 ### FASE 1: Autenticación y Navegación (COMENZAR AQUÍ)
-1. **LoginScreen** 
+1. **LoginPage** 
    - POST /login con email + password
-   - Guardar token en AsyncStorage
-   - Extraer tenant_id y codigo_usuario del response
-   - Navegación a HomeScreen después de login exitoso
+   - Guardar token en localStorage (NO AsyncStorage, esto es web)
+   - **IMPORTANTE:** El tenant_id NO se guarda manualmente, el backend lo extrae del JWT automáticamente
+   - Extraer codigo_usuario del response para mostrar en UI
+   - Navegación a HomePage después de login exitoso
+   - UI con Tailwind: formulario centrado, card con sombra, botón primary
 
 2. **AuthContext**
-   - Estado global: { user, token, tenant_id, isAuthenticated }
+   - Estado global: { user, token, isAuthenticated }
+   - **NO guardes tenant_id** en estado (el backend lo maneja desde el JWT)
    - Funciones: login(), logout(), checkAuth()
-   - Persistencia de sesión (AsyncStorage)
+   - Persistencia de sesión (localStorage)
+   - Inicializar token desde localStorage al cargar app
 
 3. **API Service (api.js)**
    - Axios instance con baseURL
-   - Interceptor para agregar Authorization: Bearer {token}
-   - Interceptor para manejar errores 401 (logout automático)
+   - Interceptor request: agregar Authorization: Bearer {token} desde localStorage
+   - Interceptor response: manejar errores 401 → logout automático + redirect a /login
+   - Interceptor response: extraer data.data de responses (estructura estándar backend)
 
 ### FASE 2: Productos (Core Functionality)
-4. **ListaProductosScreen**
+4. **ProductosPage**
    - GET /productos con paginación (limit + next_token)
-   - FlatList con pull-to-refresh
-   - Mostrar: código, nombre, precio, stock, categoría
-   - Navegación a Editar/Eliminar
+   - Tabla con Tailwind (o grid de cards)
+   - Botón "Crear Producto" abre modal o navega a formulario
+   - Mostrar: código, nombre, precio, stock, categoría, acciones (editar/eliminar)
+   - Infinite scroll o botón "Cargar más" para next_token
+   - **IMPORTANTE:** El tenant_id NO se envía en la request, el backend lo extrae del JWT
 
-5. **CrearProductoScreen**
-   - Formulario: nombre, precio, stock, categoría, descripción
-   - POST /productos
-   - Validaciones: precio > 0, stock >= 0, campos requeridos
-   - Categorías fijas: bebidas, snacks, abarrotes, limpieza, otros
+5. **Formulario Crear Producto** (modal o página separada)
+   - Campos: nombre, precio, stock, categoría, descripción
+   - POST /productos (body NO incluye tenant_id, el backend lo agrega automáticamente)
+   - Validaciones: precio > 0, stock >= 0, nombre requerido
+   - Categorías fijas: bebidas, snacks, abarrotes, limpieza, otros (select con Tailwind)
+   - UI Tailwind: formulario con labels, inputs estilizados, botones primary/secondary
 
 6. **BuscarProductosScreen**
    - POST /productos/buscar con query
@@ -182,25 +224,47 @@ saai-trabajador/
 
 ## 💡 TIPS IMPORTANTES
 
-### 1. Autenticación
+### 1. Autenticación y Multi-tenant
 ```javascript
-// CORRECTO: El token se guarda en login y se usa en todas las requests
+// ✅ CORRECTO: El token se guarda en localStorage (web)
 const login = async (email, password) => {
   const response = await api.post('/login', { email, password });
   const { token, user } = response.data.data;
-  await AsyncStorage.setItem('token', token);
-  await AsyncStorage.setItem('user', JSON.stringify(user));
+  
+  // Guardar en localStorage (NO AsyncStorage)
+  localStorage.setItem('token', token);
+  localStorage.setItem('user', JSON.stringify(user));
+  
   setAuthState({ token, user, isAuthenticated: true });
+  
+  // ❌ NO HACER ESTO: NO guardes tenant_id manualmente
+  // localStorage.setItem('tenant_id', user.tenant_id); // ❌ INCORRECTO
+  
+  // El tenant_id está en el JWT, el BACKEND lo extrae automáticamente
 };
 
-// CORRECTO: Axios interceptor agrega el token automáticamente
+// ✅ CORRECTO: Axios interceptor agrega el token automáticamente
 api.interceptors.request.use(config => {
-  const token = AsyncStorage.getItem('token');
+  const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+    // ❌ NO agregues tenant_id manualmente en headers
   }
   return config;
 });
+
+// ✅ CORRECTO: Manejar 401 (token expirado)
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 ```
 
 ### 2. Códigos vs UUIDs
@@ -243,23 +307,55 @@ const venta = {
 };
 ```
 
-### 5. WebSockets
+### 5. WebSockets (Notificaciones en Tiempo Real)
 ```javascript
 // Conectar al login
 const connectWebSocket = (token) => {
   const ws = new WebSocket(`wss://xxx.execute-api.us-east-1.amazonaws.com/dev?token=${token}`);
   
+  ws.onopen = () => {
+    console.log('✅ WebSocket conectado');
+  };
+  
   ws.onmessage = (event) => {
     const { event_type, payload } = JSON.parse(event.data);
     
     if (event_type === 'venta_registrada') {
-      // Mostrar notificación push
-      showNotification('Nueva venta registrada');
+      // Mostrar notificación browser (Web Notifications API)
+      if (Notification.permission === 'granted') {
+        new Notification('Nueva venta registrada', {
+          body: `Venta ${payload.codigo_venta} registrada exitosamente`,
+          icon: '/favicon.ico'
+        });
+      }
+      
       // Refetch lista de ventas
       fetchVentas();
     }
+    
+    if (event_type === 'producto_actualizado') {
+      // Refetch lista de productos
+      fetchProductos();
+    }
   };
+  
+  ws.onerror = (error) => {
+    console.error('❌ WebSocket error:', error);
+  };
+  
+  ws.onclose = () => {
+    console.log('WebSocket desconectado');
+    // Reconectar después de 5 segundos
+    setTimeout(() => connectWebSocket(token), 5000);
+  };
+  
+  return ws;
 };
+
+// Solicitar permisos de notificaciones al login
+if (Notification.permission === 'default') {
+  Notification.requestPermission();
+}
 ```
 
 ### 6. Validaciones
@@ -327,20 +423,94 @@ try {
 
 ---
 
-## 🎨 UI/UX RECOMENDACIONES
+## 🎨 UI/UX RECOMENDACIONES CON TAILWIND CSS
 
-1. **Colores:** Usar tema consistente (azul primary, verde success, rojo danger)
-2. **Navegación:** BottomTabNavigator con 3 tabs principales:
-   - 🏠 Inicio (Dashboard simple)
-   - 📦 Productos (Lista + botón crear)
-   - 💰 Ventas (Registrar + historial)
-   - 🔔 Notificaciones (Lista + badge)
-3. **Icons:** React Native Vector Icons (MaterialCommunityIcons)
-4. **Forms:** React Hook Form para validaciones
-5. **Toast:** react-native-toast-message para feedback
-6. **Pull to Refresh:** En todas las listas
-7. **Loading:** ActivityIndicator mientras carga datos
-8. **Empty States:** Mensajes amigables cuando no hay datos
+1. **Colores (Tailwind):** 
+   - Primary: `bg-blue-600 hover:bg-blue-700 text-white`
+   - Success: `bg-green-600 hover:bg-green-700 text-white`
+   - Danger: `bg-red-600 hover:bg-red-700 text-white`
+   - Warning: `bg-yellow-500 hover:bg-yellow-600 text-white`
+   
+2. **Layout:**
+   - Navbar superior con logo, nombre de tienda, notificaciones, logout
+   - Sidebar izquierdo (desktop) o menú hamburguesa (mobile) con:
+     - 🏠 Inicio (Dashboard simple)
+     - 📦 Productos (Gestión completa)
+     - 💰 Ventas (Registrar + historial)
+     - 🔔 Notificaciones
+   - Contenido principal con padding: `<main className="p-6">`
+   
+3. **Componentes UI con Tailwind:**
+   ```jsx
+   // Button.jsx
+   <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+     {children}
+   </button>
+   
+   // Input.jsx
+   <input className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+   
+   // Card.jsx
+   <div className="bg-white rounded-lg shadow-md p-6">
+     {children}
+   </div>
+   
+   // Table.jsx
+   <table className="min-w-full divide-y divide-gray-200">
+     <thead className="bg-gray-50">
+       <tr>
+         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+           Código
+         </th>
+       </tr>
+     </thead>
+   </table>
+   ```
+
+4. **Icons:** Heroicons (ya compatible con Tailwind) o React Icons
+   ```bash
+   npm install @heroicons/react
+   ```
+   
+5. **Forms:** React Hook Form para validaciones
+   ```bash
+   npm install react-hook-form
+   ```
+   
+6. **Toasts:** react-hot-toast (ligero y compatible con Tailwind)
+   ```bash
+   npm install react-hot-toast
+   ```
+   
+7. **Loading:** Spinner con Tailwind
+   ```jsx
+   <div className="flex items-center justify-center">
+     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+   </div>
+   ```
+   
+8. **Empty States:** Centrados con Tailwind
+   ```jsx
+   <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+     <svg className="w-16 h-16 mb-4" />  
+     <p className="text-lg">No hay productos registrados</p>
+     <button className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">
+       Crear Producto
+     </button>
+   </div>
+   ```
+
+9. **Responsive:** Usar clases responsive de Tailwind
+   ```jsx
+   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+     {/* Cards de productos */}
+   </div>
+   ```
+
+10. **Dark Mode (opcional):** Tailwind soporta dark mode out-of-the-box
+    ```jsx
+    <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+    ```
 
 ---
 
@@ -361,8 +531,8 @@ try {
 
 ```javascript
 // src/utils/constants.js
-export const API_URL = 'https://xxx.execute-api.us-east-1.amazonaws.com/dev';
-export const WS_URL = 'wss://xxx.execute-api.us-east-1.amazonaws.com/dev';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://xxx.execute-api.us-east-1.amazonaws.com/dev';
+export const WS_URL = import.meta.env.VITE_WS_URL || 'wss://xxx.execute-api.us-east-1.amazonaws.com/dev';
 
 export const CATEGORIAS = [
   'bebidas',
@@ -377,6 +547,41 @@ export const METODOS_PAGO = [
   'tarjeta',
   'yape'
 ];
+
+// Estados permitidos (referencia, el backend maneja la lógica)
+export const ESTADOS = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO'
+};
+```
+
+```javascript
+// .env.local (crear este archivo)
+VITE_API_URL=https://xxx.execute-api.us-east-1.amazonaws.com/dev
+VITE_WS_URL=wss://xxx.execute-api.us-east-1.amazonaws.com/dev
+```
+
+```javascript
+// tailwind.config.js (ya debería existir)
+module.exports = {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: '#eff6ff',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+        },
+      },
+    },
+  },
+  plugins: [],
+}
 ```
 
 ---
