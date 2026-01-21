@@ -124,9 +124,9 @@ saai-trabajador/
 │   │   └── ProtectedRoute.jsx # HOC para rutas privadas
 │   └── App.jsx           # Router + AuthProvider
 ├── index.html
-├── tailwind.config.js    # Configuración de Tailwind
-├── vite.config.js
-└── package.json          # Incluye Tailwind CSS
+├── package.json          # Incluye Tailwind CSS v4.x
+├── vite.config.js        # Con @tailwindcss/vite plugin
+└── tailwind.config.js    # OPCIONAL: Solo si se necesita personalización extra (v4 no lo requiere por defecto)
 ```
 
 ---
@@ -206,9 +206,9 @@ saai-trabajador/
     - Badge con contador de no leídas
 
 12. **WebSocket Service**
-    - Conectar a WebSocket API al login usando el formato EXACTO documentado en SAAI_oficial.txt y Postman (wss://...?token=JWT)
+    - Conectar a WebSocket API al login
+    - **IMPORTANTE:** Verificar en SAAI_oficial.txt y Postman el formato EXACTO de conexión (puede ser ?token=JWT en query string, o en headers, o handshake custom). NO asumir formato sin verificar.
     - Escuchar eventos: venta_registrada, producto_actualizado
-    - Mostrar notificaciones push nativas
     - Actualizar badge de notificaciones
 
 ### FASE 5: Pulido y UX
@@ -253,6 +253,13 @@ api.interceptors.request.use(config => {
   return config;
 });
 
+// ⚠️ REGLA CRÍTICA: NO INVENTAR ENDPOINTS
+// Si necesitas un endpoint que no está en SAAI_oficial.txt o Postman:
+// 1. Verificar que realmente no existe
+// 2. Preguntar al usuario o marcarlo como TODO
+// 3. NO crear rutas nuevas sin confirmación
+// Ejemplo: ❌ NO HACER: await api.post('/productos/validar') // Este endpoint NO existe
+
 // ✅ CORRECTO: Manejar 401 (token expirado)
 api.interceptors.response.use(
   response => response,
@@ -260,7 +267,16 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      
+      // ✅ PREFERIR: React Router navigate (si está disponible)
+      // Si tienes acceso al navigate de useNavigate(), usarlo:
+      // navigate('/login');
+      
+      // ✅ FALLBACK: window.location (solo si no hay router disponible)
       window.location.href = '/login';
+      
+      // Nota: Para usar navigate en interceptor, crear una instancia global
+      // o usar un event emitter para comunicar con el componente de routing
     }
     return Promise.reject(error);
   }
@@ -286,7 +302,8 @@ const fetchProductos = async () => {
   if (nextToken) params.next_token = nextToken;
   
   const response = await api.get('/productos', { params });
-  setProductos([...productos, ...response.data.data.productos]);
+  // ✅ FORMA SEGURA: usar prev para evitar bugs de estado
+  setProductos(prev => [...prev, ...response.data.data.productos]);
   setNextToken(response.data.data.next_token || null);
 };
 ```
@@ -310,7 +327,10 @@ const venta = {
 ### 5. WebSockets (Notificaciones en Tiempo Real)
 ```javascript
 // Conectar al login
+// IMPORTANTE: Verificar en Postman/SAAI_oficial el formato exacto de autenticación
+// Puede ser: ?token=${token}, headers, o handshake custom
 const connectWebSocket = (token) => {
+  // Ejemplo común (VERIFICAR antes de usar):
   const ws = new WebSocket(`wss://xxx.execute-api.us-east-1.amazonaws.com/dev?token=${token}`);
   
   ws.onopen = () => {
@@ -343,9 +363,23 @@ const connectWebSocket = (token) => {
     console.error('❌ WebSocket error:', error);
   };
   
-  ws.onclose = () => {
-    console.log('WebSocket desconectado');
-    // Reconectar después de 5 segundos
+  ws.onclose = (event) => {
+    console.log('WebSocket desconectado', event.code, event.reason);
+    
+    // ⚠️ NO reconectar si fue error de autenticación (token expirado/inválido)
+    // Códigos comúnes: 1008 (policy violation), 4001 (unauthorized custom)
+    const isAuthError = event.code === 1008 || event.code === 4001 || event.reason?.includes('401');
+    
+    if (isAuthError) {
+      console.error('❌ Token inválido/expirado, cerrando sesión...');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login'; // O navigate('/login')
+      return; // NO reconectar
+    }
+    
+    // ✅ Reconectar solo si fue cierre normal o error de red
+    console.log('↻ Reconectando en 5 segundos...');
     setTimeout(() => connectWebSocket(token), 5000);
   };
   
@@ -562,8 +596,13 @@ VITE_WS_URL=wss://xxx.execute-api.us-east-1.amazonaws.com/dev
 ```
 
 ```javascript
-// tailwind.config.js (crear si no existe)
-module.exports = {
+// TAILWIND CSS v4 CON VITE
+// Con Tailwind v4.x + @tailwindcss/vite, NO es necesario tailwind.config.js
+// La configuración se hace en CSS con @theme y @config
+
+// Si AÚN se requiere tailwind.config.js (casos especiales):
+// Y el proyecto usa "type": "module" (ESM), usar export default:
+export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",

@@ -152,9 +152,9 @@ saai-admin/
 │   │   ├── AppRoutes.jsx
 │   │   └── ProtectedRoute.jsx
 │   └── App.jsx
-├── tailwind.config.js
-├── vite.config.js
-└── package.json
+├── package.json              # Incluye Tailwind CSS v4.x
+├── vite.config.js            # Con @tailwindcss/vite plugin
+└── tailwind.config.js        # OPCIONAL: Solo si se necesita personalización extra (v4 no lo requiere por defecto)
 ```
 
 ---
@@ -169,7 +169,9 @@ saai-admin/
 
 2. **API Service + Interceptors**
    - Axios con Authorization header
-   - Error handling 401 → logout
+   - Error handling 401 → logout + redirect a /login
+     - **PREFERIR:** React Router navigate('/login') si está disponible
+     - **FALLBACK:** window.location.href = '/login' solo si no hay router
    - Error handling genérico
 
 3. **Sidebar + React Router**
@@ -299,13 +301,14 @@ saai-admin/
 
 21. **WebSocket Service Completo**
     - Conectar al login
+    - **IMPORTANTE:** Verificar en SAAI_oficial.txt y Postman el formato EXACTO de conexión (puede ser ?token=JWT en query string, o en headers, o handshake custom). NO asumir formato sin verificar.
+    - **CRÍTICO:** En ws.onclose, NO reconectar si el cierre fue por 401/unauth (token expirado). Hacer logout y redirigir a /login para evitar loops infinitos.
     - Eventos a escuchar:
       - venta_registrada → refetch ventas + analítica
       - analitica_actualizada → refetch analítica
       - prediccion_generada → refetch predicción
       - producto_actualizado → refetch productos
-    - Mostrar notificaciones push nativas
-    - Actualizar badge
+    - Actualizar badge de notificaciones
 
 ---
 
@@ -346,6 +349,22 @@ const setupWebSocket = () => {
 // 3. ActualizarAnalitica emite evento WebSocket 'analitica_actualizada'
 // 4. Frontend escucha evento y hace GET /analitica (refetch)
 // 5. VerAnalitica (GET) consulta t_analitica (NO recalcula)
+```
+
+### 2. REGLA CRÍTICA: NO INVENTAR ENDPOINTS
+```javascript
+// ⚠️ Si necesitas un endpoint que no está en SAAI_oficial.txt o Postman:
+// 1. Verificar que realmente no existe
+// 2. Preguntar al usuario o marcarlo como TODO
+// 3. NO crear rutas nuevas sin confirmación
+
+// Ejemplo: ❌ NO HACER
+await api.post('/productos/validar'); // Este endpoint NO existe
+await api.get('/dashboard/stats');    // Este endpoint NO existe
+
+// ✅ CORRECTO: Solo usar endpoints documentados
+await api.get('/productos');           // ✅ Documentado
+await api.get('/analitica');           // ✅ Documentado
 ```
 ```
 

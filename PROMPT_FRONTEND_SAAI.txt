@@ -108,9 +108,9 @@ saai-plataforma/
 │   │   ├── AppRoutes.jsx
 │   │   └── ProtectedRoute.jsx
 │   └── App.jsx
-├── tailwind.config.js
-├── vite.config.js
-└── package.json
+├── package.json              # Incluye Tailwind CSS v4.x
+├── vite.config.js            # Con @tailwindcss/vite plugin
+└── tailwind.config.js        # OPCIONAL: Solo si se necesita personalización extra (v4 no lo requiere por defecto)
 ```
 
 ---
@@ -135,6 +135,8 @@ saai-plataforma/
    - Axios con baseURL
    - Interceptor request: Authorization: Bearer {token}
    - Interceptor response: manejo 401 → logout + redirect /login
+     - **PREFERIR:** React Router navigate('/login') si está disponible
+     - **FALLBACK:** window.location.href = '/login' solo si no hay router
 
 ### FASE 2: Dashboard Global (Vista Principal)
 4. **DashboardSAAIPage**
@@ -246,6 +248,13 @@ const registrarTienda = async (data) => {
     message: 'Se ha enviado un email de bienvenida al administrador.'
   });
 };
+
+// ⚠️ REGLA CRÍTICA: NO INVENTAR ENDPOINTS
+// Si necesitas un endpoint que no está en SAAI_oficial.txt o Postman:
+// 1. Verificar que realmente no existe
+// 2. Preguntar al usuario o marcarlo como TODO
+// 3. NO crear rutas nuevas sin confirmación
+// Ejemplo: ❌ NO HACER: await api.post('/tiendas/validar') // Este endpoint NO existe
 
 // ⚠️ Lo que hace el backend automáticamente:
 // 1. Genera codigo_tienda usando t_counters (T001, T002, T003...)
