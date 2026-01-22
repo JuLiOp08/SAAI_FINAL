@@ -115,119 +115,119 @@ def handler(event, context):
             alertas_semana = []
             
             for periodo_info in periodos:
-            periodo_nombre = periodo_info['nombre']
-            dias_periodo = periodo_info['dias']
-            
-            logger.info(f"  📊 Procesando periodo '{periodo_nombre}' ({dias_periodo} días)")
-            
-            # Período de análisis
-            fecha_fin = fecha_calc
-            if dias_periodo == 1:
-                fecha_inicio = fecha_calc
-            else:
-                fecha_inicio = fecha_calc - timedelta(days=dias_periodo - 1)
-        
-            # =================================================================
-            # CÁLCULOS DE ANALÍTICA
-            # =================================================================
-            
-            # 1. VENTAS del período
-            ventas_periodo = calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin)
-            
-            # 2. GASTOS del período
-            gastos_periodo = calcular_gastos_periodo(tenant_id, fecha_inicio, fecha_fin)
-            
-            # 3. Calcular BALANCE (ingresos - egresos)
-            balance = ventas_periodo['total_ingresos'] - gastos_periodo['total_egresos']
-            gastos_periodo['balance'] = round(balance, 2)
-            
-            # 4. INVENTARIO actual (solo para dia y semana, no mes para optimizar)
-            if periodo_nombre in ['dia', 'semana']:
-                inventario_actual = calcular_inventario_actual(tenant_id)
-            else:
-                inventario_actual = {"total_productos": 0, "productos_sin_stock": 0, "productos_bajo_stock": 0, "valor_total": 0.0}
-            
-            # 5. USUARIOS de la tienda (solo para semana, no repetir)
-            if periodo_nombre == 'semana':
-                usuarios_tienda = calcular_usuarios_tienda(tenant_id)
-            else:
-                usuarios_tienda = {"administradores": 0, "trabajadores": 0}
-            
-            # 6. PRODUCTOS TOP (más vendidos del período)
-            productos_top = calcular_productos_top(tenant_id, fecha_inicio, fecha_fin)
-            
-            # 7. VENTAS DIARIAS del período
-            ventas_diarias = calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin)
-            
-            # Construir resultado analítico (convertir floats a Decimal)
-            analitica_data = {
-                "periodo": {
-                    "tipo": periodo_nombre,
-                    "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
-                    "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
-                    "dias": dias_periodo
-                },
-                "ventas": convert_floats_to_decimal(ventas_periodo),
-                "gastos": convert_floats_to_decimal(gastos_periodo),
-                "inventario": convert_floats_to_decimal(inventario_actual),
-                "usuarios": usuarios_tienda,
-                "productos_top": productos_top,
-                "ventas_diarias": [convert_floats_to_decimal(v) for v in ventas_diarias],
-                "alertas_detectadas": [],
-                "updated_at": obtener_fecha_hora_peru()
-            }
-            
-            # =================================================================
-            # DETECCIÓN DE ALERTAS (solo para periodo 'semana')
-            # =================================================================
-            if periodo_nombre == 'semana':
-                # Alerta: Total ventas = 0
-                if ventas_periodo['total_ventas'] == 0:
-                    alertas_semana.append({
-                        "tipo": "totalventas_0",
-                        "severidad": "CRITICAL", 
-                        "mensaje": "No se registraron ventas en la semana"
-                    })
+                periodo_nombre = periodo_info['nombre']
+                dias_periodo = periodo_info['dias']
                 
-                # Alerta: Ganancia baja del día (< 50 soles)
-                ventas_hoy = next((v for v in ventas_diarias if v['fecha'] == fecha_str), None)
-                if ventas_hoy and ventas_hoy.get('ingresos', 0) < THRESHOLD_GANANCIA_BAJA:
-                    alertas_semana.append({
-                        "tipo": "gananciaDiaBaja",
-                        "severidad": "INFO",
-                        "mensaje": f"Ganancia del día baja: S/ {ventas_hoy['ingresos']:.2f}"
-                    })
+                logger.info(f"  📊 Procesando periodo '{periodo_nombre}' ({dias_periodo} días)")
                 
-                # Alerta: Producto top sin stock o stock bajo
-                if productos_top:
-                    producto_mas_vendido = productos_top[0]
-                    stock_producto = obtener_stock_producto(tenant_id, producto_mas_vendido['codigo_producto'])
-                    if stock_producto == 0:
+                # Período de análisis
+                fecha_fin = fecha_calc
+                if dias_periodo == 1:
+                    fecha_inicio = fecha_calc
+                else:
+                    fecha_inicio = fecha_calc - timedelta(days=dias_periodo - 1)
+            
+                # =================================================================
+                # CÁLCULOS DE ANALÍTICA
+                # =================================================================
+                
+                # 1. VENTAS del período
+                ventas_periodo = calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin)
+                
+                # 2. GASTOS del período
+                gastos_periodo = calcular_gastos_periodo(tenant_id, fecha_inicio, fecha_fin)
+                
+                # 3. Calcular BALANCE (ingresos - egresos)
+                balance = ventas_periodo['total_ingresos'] - gastos_periodo['total_egresos']
+                gastos_periodo['balance'] = round(balance, 2)
+                
+                # 4. INVENTARIO actual (solo para dia y semana, no mes para optimizar)
+                if periodo_nombre in ['dia', 'semana']:
+                    inventario_actual = calcular_inventario_actual(tenant_id)
+                else:
+                    inventario_actual = {"total_productos": 0, "productos_sin_stock": 0, "productos_bajo_stock": 0, "valor_total": 0.0}
+                
+                # 5. USUARIOS de la tienda (solo para semana, no repetir)
+                if periodo_nombre == 'semana':
+                    usuarios_tienda = calcular_usuarios_tienda(tenant_id)
+                else:
+                    usuarios_tienda = {"administradores": 0, "trabajadores": 0}
+                
+                # 6. PRODUCTOS TOP (más vendidos del período)
+                productos_top = calcular_productos_top(tenant_id, fecha_inicio, fecha_fin)
+                
+                # 7. VENTAS DIARIAS del período
+                ventas_diarias = calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin)
+                
+                # Construir resultado analítico (convertir floats a Decimal)
+                analitica_data = {
+                    "periodo": {
+                        "tipo": periodo_nombre,
+                        "fecha_inicio": fecha_inicio.strftime('%Y-%m-%d'),
+                        "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
+                        "dias": dias_periodo
+                    },
+                    "ventas": convert_floats_to_decimal(ventas_periodo),
+                    "gastos": convert_floats_to_decimal(gastos_periodo),
+                    "inventario": convert_floats_to_decimal(inventario_actual),
+                    "usuarios": usuarios_tienda,
+                    "productos_top": productos_top,
+                    "ventas_diarias": [convert_floats_to_decimal(v) for v in ventas_diarias],
+                    "alertas_detectadas": [],
+                    "updated_at": obtener_fecha_hora_peru()
+                }
+                
+                # =================================================================
+                # DETECCIÓN DE ALERTAS (solo para periodo 'semana')
+                # =================================================================
+                if periodo_nombre == 'semana':
+                    # Alerta: Total ventas = 0
+                    if ventas_periodo['total_ventas'] == 0:
                         alertas_semana.append({
-                            "tipo": "productoTopSinStock",
-                            "severidad": "INFO",
-                            "mensaje": f"Producto más vendido sin stock: {producto_mas_vendido['nombre']}"
+                            "tipo": "totalventas_0",
+                            "severidad": "CRITICAL", 
+                            "mensaje": "No se registraron ventas en la semana"
                         })
-                    elif stock_producto <= THRESHOLD_STOCK_BAJO:
+                    
+                    # Alerta: Ganancia baja del día (< 50 soles)
+                    ventas_hoy = next((v for v in ventas_diarias if v['fecha'] == fecha_str), None)
+                    if ventas_hoy and ventas_hoy.get('ingresos', 0) < THRESHOLD_GANANCIA_BAJA:
                         alertas_semana.append({
-                            "tipo": "productoTopStockBajo",
+                            "tipo": "gananciaDiaBaja",
                             "severidad": "INFO",
-                            "mensaje": f"Producto más vendido con stock bajo: {producto_mas_vendido['nombre']} ({stock_producto} unidades)"
+                            "mensaje": f"Ganancia del día baja: S/ {ventas_hoy['ingresos']:.2f}"
                         })
+                    
+                    # Alerta: Producto top sin stock o stock bajo
+                    if productos_top:
+                        producto_mas_vendido = productos_top[0]
+                        stock_producto = obtener_stock_producto(tenant_id, producto_mas_vendido['codigo_producto'])
+                        if stock_producto == 0:
+                            alertas_semana.append({
+                                "tipo": "productoTopSinStock",
+                                "severidad": "INFO",
+                                "mensaje": f"Producto más vendido sin stock: {producto_mas_vendido['nombre']}"
+                            })
+                        elif stock_producto <= THRESHOLD_STOCK_BAJO:
+                            alertas_semana.append({
+                                "tipo": "productoTopStockBajo",
+                                "severidad": "INFO",
+                                "mensaje": f"Producto más vendido con stock bajo: {producto_mas_vendido['nombre']} ({stock_producto} unidades)"
+                            })
+                    
+                    analitica_data["alertas_detectadas"] = alertas_semana
                 
-                analitica_data["alertas_detectadas"] = alertas_semana
-            
-            # =================================================================
-            # GUARDAR EN t_analitica
-            # =================================================================
-            entity_id = periodo_nombre  # 'dia', 'semana', 'mes'
-            
-            success = put_item_standard(
-                table_name=os.environ['ANALITICA_TABLE'],
-                tenant_id=tenant_id,
-                entity_id=entity_id,
-                data=analitica_data
-            )
+                # =================================================================
+                # GUARDAR EN t_analitica
+                # =================================================================
+                entity_id = periodo_nombre  # 'dia', 'semana', 'mes'
+                
+                success = put_item_standard(
+                    table_name=os.environ['ANALITICA_TABLE'],
+                    tenant_id=tenant_id,
+                    entity_id=entity_id,
+                    data=analitica_data
+                )
             
             if success:
                 logger.info(f"  ✅ Analítica guardada: {periodo_nombre}")
