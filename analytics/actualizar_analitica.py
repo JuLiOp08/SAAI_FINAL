@@ -73,7 +73,7 @@ def handler(event, context):
             # Filtrar solo tiendas ACTIVAS
             tiendas_activas = [
                 t for t in todas_tiendas 
-                if t.get('data', {}).get('estado') == 'ACTIVA'
+                if t.get('estado') == 'ACTIVA'
             ]
             
             logger.info(f"📊 Tiendas encontradas: {len(todas_tiendas)} total, {len(tiendas_activas)} activas")
@@ -96,7 +96,7 @@ def handler(event, context):
         total_periodos_guardados = 0
         
         for tienda in tiendas_activas:
-            tenant_id = tienda.get('data', {}).get('codigo_tienda')
+            tenant_id = tienda.get('codigo_tienda')
             
             if not tenant_id:
                 logger.warning(f"⚠️ Tienda sin codigo_tienda: {tienda.get('entity_id')}")
