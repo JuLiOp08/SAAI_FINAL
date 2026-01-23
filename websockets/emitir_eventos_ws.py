@@ -111,6 +111,9 @@ def handler(event, context):
                 'body': json.dumps({'error': 'WebSocket endpoint no configurado'})
             }
         
+        # DEBUG: Mostrar endpoint configurado
+        logger.info(f"🔍 WS_API_ENDPOINT configurado: {WS_API_ENDPOINT}")
+        
         apigateway_management = boto3.client(
             'apigatewaymanagementapi',
             endpoint_url=WS_API_ENDPOINT,

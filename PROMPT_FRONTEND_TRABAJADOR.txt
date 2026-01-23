@@ -528,6 +528,25 @@ useEffect(() => {
 }, []);
 ```
 
+**LOGOUT (cerrar sesión):**
+```javascript
+// AuthContext o donde manejes logout
+const logout = () => {
+  // 1. Desconectar WebSocket PRIMERO
+  disconnectWebSocket();
+  
+  // 2. Limpiar localStorage
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  
+  // 3. Limpiar estado
+  setAuthState({ token: null, user: null, isAuthenticated: false });
+  
+  // 4. Redirigir al login
+  navigate('/login');
+};
+```
+
 **VERIFICACIÓN (DevTools Console):**
 - Al hacer login → ver `✅ WebSocket conectado` (1 vez)
 - Al navegar (productos → ventas → notificaciones) → NO debe reconectar
