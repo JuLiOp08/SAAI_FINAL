@@ -300,15 +300,57 @@ saai-admin/
     - Severidad: INFO, WARNING, CRITICAL
 
 21. **WebSocket Service Completo**
-    - Conectar al login
-    - **IMPORTANTE:** Verificar en SAAI_oficial.txt y Postman el formato EXACTO de conexión (puede ser ?token=JWT en query string, o en headers, o handshake custom). NO asumir formato sin verificar.
-    - **CRÍTICO:** En ws.onclose, NO reconectar si el cierre fue por 401/unauth (token expirado). Hacer logout y redirigir a /login para evitar loops infinitos.
-    - Eventos a escuchar:
-      - venta_registrada → refetch ventas + analítica
-      - analitica_actualizada → refetch analítica
-      - prediccion_generada → refetch predicción
-      - producto_actualizado → refetch productos
-    - Actualizar badge de notificaciones
+    
+    **FORMATO OFICIAL (VERIFICADO EN SAAI_oficial.txt):**
+    - Autenticación: `?token=${token}` en query string
+    - El token de localStorage ya está limpio (SIN "Bearer ")
+    - Estructura de eventos: `{ event_type: string, payload: object }`
+    
+    **EVENTOS DISPONIBLES (ROL ADMIN):**
+    1. `venta_registrada` → emitido por RegistrarVenta
+       - Refetch: ventas, productos, analitica (si necesario), notificaciones
+    2. `producto_actualizado` → emitido por ActualizarProducto
+       - Refetch: productos
+    3. `analitica_actualizada` → emitido por ActualizarAnalitica (cada 4h)
+       - **CRÍTICO**: Refetch GET /analitica (NO existe POST /analitica)
+       - Refetch: notificaciones (nuevas alertas detectadas)
+    4. `prediccion_generada` → emitido por PrediccionDemanda
+       - Refetch: notificaciones (alertas de stock vs demanda)
+    
+    **IMPLEMENTACIÓN:**
+    ```javascript
+    // websocket.service.js (mismo código que TRABAJADOR)
+    // Ver PROMPT_FRONTEND_TRABAJADOR líneas 326-450 para código completo
+    
+    // Callbacks específicos ADMIN:
+    const ws = connectWebSocket(token, {
+      onVentaRegistrada: (payload) => {
+        queryClient.invalidateQueries(['ventas']);
+        queryClient.invalidateQueries(['productos']);
+        queryClient.invalidateQueries(['analitica']); // Métricas actualizadas
+        queryClient.invalidateQueries(['notificaciones']);
+      },
+      onProductoActualizado: (payload) => {
+        queryClient.invalidateQueries(['productos']);
+      },
+      onAnaliticaActualizada: (payload) => {
+        // EventBridge acaba de ejecutar ActualizarAnalitica
+        queryClient.invalidateQueries(['analitica']);
+        queryClient.invalidateQueries(['notificaciones']);
+      },
+      onPrediccionGenerada: (payload) => {
+        // Nueva predicción disponible
+        queryClient.invalidateQueries(['predicciones']);
+        queryClient.invalidateQueries(['notificaciones']);
+      }
+    });
+    ```
+    
+    **⚠️ REGLAS CRÍTICAS:**
+    - NO reconectar si el cierre fue por 401/token inválido
+    - Hacer logout y redirigir a /login para evitar loops infinitos
+    - Máximo 5 intentos de reconexión (delay 5s entre intentos)
+    - Cerrar conexión al logout con `disconnectWebSocket()`
 
 ---
 

@@ -154,11 +154,12 @@ def handler(event, context):
                 if error_code in ['GoneException', 'ForbiddenException']:
                     logger.warning(f"Conexión inválida, eliminando: {connection_id}")
                     
-                    # Eliminar conexión inválida
+                    # Eliminar conexión inválida (hard delete - conexiones WS no usan soft delete)
                     delete_success = delete_item_standard(
                         WS_CONNECTIONS_TABLE,
                         tenant_id,
-                        connection_id
+                        connection_id,
+                        soft_delete=False  # Hard delete para conexiones WebSocket
                     )
                     
                     if delete_success:

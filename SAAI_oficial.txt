@@ -2204,11 +2204,21 @@ Ruta: Interna (WebSocket API → Lambda)
 Descripción:
 Se ejecuta cuando el cliente cierra la conexión o esta expira.
 Elimina la conexión en t_ws_connections para evitar envíos fallidos y mantener el estado de conexiones activo consistente.
+
+IMPORTANTE: Usa HARD DELETE (no soft delete) porque las conexiones WebSocket no son datos de negocio,
+son registros técnicos de estado. Cuando una conexión se cierra, debe eliminarse completamente.
+
 Tablas:
-•	t_ws_connections (DELETE)
+•	t_ws_connections (DELETE - hard delete)
 Servicios:
 •	API Gateway WebSocket (route: $disconnect)
 •	No usa SNS
+
+Flujo:
+1. Extrae connection_id del evento
+2. Busca tenant_id usando SCAN (producción: usar GSI entity_id-index)
+3. Elimina conexión con delete_item_standard(soft_delete=False)
+4. Retorna 200 siempre (evitar reintentos de API Gateway)
 ________________________________________
 Lambda: EmitirEventosWs
 Ruta: Interna (invocado por Lambdas de negocio)
@@ -2217,12 +2227,48 @@ Emite eventos a los clientes conectados de una tienda.
 Recibe un evento interno con tenant_id y tipo, consulta en t_ws_connections las conexiones activas del tenant_id,
 y envía el payload a cada connectionId usando el API Gateway Management API (postToConnection).
 Si un envío falla por conexión inválida, limpia esa conexión en t_ws_connections para mantener la tabla consistente.
+
+IMPORTANTE: Cuando postToConnection retorna GoneException o ForbiddenException, significa que la conexión
+está muerta. En ese caso, hace HARD DELETE (soft_delete=False) para eliminar completamente el registro,
+ya que las conexiones WebSocket son estado técnico, no datos de negocio.
+
 Tablas:
-•	t_ws_connections (QUERY por tenant_id; DELETE de conexiones inválidas)
+•	t_ws_connections (QUERY por tenant_id; DELETE hard de conexiones inválidas)
 Servicios:
 •	DynamoDB (lectura de conexiones)
 •	API Gateway Management API (postToConnection)
 •	No usa SNS
+
+Flujo:
+1. Valida tenant_id y event_type en el payload
+2. Consulta t_ws_connections filtrando por tenant_id
+3. Para cada conexión activa:
+   a. Intenta postToConnection con el mensaje
+   b. Si falla con GoneException → hard delete de la conexión
+   c. Incrementa contador de enviados/limpiados
+4. Retorna estadísticas del envío
+________________________________________
+Lambda: LimpiarConexionesInactivas
+Ruta: POST /websockets/cleanup (manual o EventBridge)
+Descripción:
+Lambda de mantenimiento que elimina conexiones WebSocket marcadas como INACTIVAS.
+Útil para limpiar conexiones acumuladas por errores en versiones anteriores o bugs.
+
+Las conexiones WebSocket deben eliminarse completamente (hard delete) cuando están inactivas,
+ya que no son datos de negocio sino estado técnico de la aplicación.
+
+Tablas:
+•	t_ws_connections (SCAN + DELETE hard)
+Servicios:
+•	DynamoDB
+•	Protegido con Authorizer (requiere rol SAAI)
+
+Flujo:
+1. Escanea tabla buscando estado='INACTIVO'
+2. Para cada conexión inactiva encontrada:
+   a. Ejecuta delete_item (hard delete)
+   b. Registra en logs
+3. Retorna estadísticas: encontradas vs eliminadas
 ________________________________________
 Eventos realtime confirmados (origen → tipo)
 1.	RegistrarVenta → EmitirEventosWs

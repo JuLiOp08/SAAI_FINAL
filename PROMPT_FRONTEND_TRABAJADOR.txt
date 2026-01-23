@@ -325,71 +325,191 @@ const venta = {
 ```
 
 ### 5. WebSockets (Notificaciones en Tiempo Real)
+
+**FORMATO OFICIAL (VERIFICADO EN SAAI_oficial.txt):**
+- Autenticación: `?token=${token}` en query string
+- El token se obtiene de localStorage (SIN "Bearer " prefix)
+- Estructura de eventos: `{ event_type: string, payload: object }`
+
+**EVENTOS DISPONIBLES (ROL TRABAJADOR):**
+1. `venta_registrada` → emitido por RegistrarVenta
+   - Refetch: ventas, productos (stock actualizado), notificaciones
+2. `producto_actualizado` → emitido por ActualizarProducto
+   - Refetch: productos
+3. `analitica_actualizada` → emitido por ActualizarAnalitica (cada 4h)
+   - Refetch: notificaciones (nuevas alertas detectadas)
+
 ```javascript
-// Conectar al login
-// IMPORTANTE: Verificar en Postman/SAAI_oficial el formato exacto de autenticación
-// Puede ser: ?token=${token}, headers, o handshake custom
-const connectWebSocket = (token) => {
-  // Ejemplo común (VERIFICAR antes de usar):
-  const ws = new WebSocket(`wss://xxx.execute-api.us-east-1.amazonaws.com/dev?token=${token}`);
+// websocket.service.js
+let wsInstance = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 5000;
+
+export const connectWebSocket = (token, callbacks = {}) => {
+  // Obtener URL de WebSocket desde .env
+  const WS_URL = import.meta.env.VITE_WS_URL;
+  if (!WS_URL) {
+    console.error('❌ VITE_WS_URL no configurado en .env');
+    return null;
+  }
+
+  // Token limpio (SIN "Bearer ")
+  const cleanToken = token.replace('Bearer ', '');
   
-  ws.onopen = () => {
-    console.log('✅ WebSocket conectado');
-  };
+  // Formato oficial: ?token=JWT
+  const wsUrl = `${WS_URL}?token=${cleanToken}`;
   
-  ws.onmessage = (event) => {
-    const { event_type, payload } = JSON.parse(event.data);
+  try {
+    wsInstance = new WebSocket(wsUrl);
     
-    if (event_type === 'venta_registrada') {
-      // Mostrar notificación browser (Web Notifications API)
-      if (Notification.permission === 'granted') {
-        new Notification('Nueva venta registrada', {
-          body: `Venta ${payload.codigo_venta} registrada exitosamente`,
-          icon: '/favicon.ico'
-        });
+    wsInstance.onopen = () => {
+      console.log('✅ WebSocket conectado');
+      reconnectAttempts = 0; // Reset contador
+      callbacks.onOpen?.();
+    };
+    
+    wsInstance.onmessage = (event) => {
+      try {
+        // Estructura oficial: { event_type: string, payload: object }
+        const data = JSON.parse(event.data);
+        const { event_type, payload } = data;
+        
+        console.log(`📩 Evento WebSocket: ${event_type}`, payload);
+        
+        // Manejar eventos según tipo
+        switch (event_type) {
+          case 'venta_registrada':
+            // Mostrar notificación browser
+            if (Notification.permission === 'granted') {
+              new Notification('Nueva venta registrada', {
+                body: `Venta ${payload.codigo_venta} por S/ ${payload.total}`,
+                icon: '/favicon.ico',
+                tag: 'venta' // Evita duplicados
+              });
+            }
+            // Refetch datos
+            callbacks.onVentaRegistrada?.(payload);
+            break;
+            
+          case 'producto_actualizado':
+            callbacks.onProductoActualizado?.(payload);
+            break;
+            
+          case 'analitica_actualizada':
+            // Nuevas alertas disponibles (stock bajo, etc.)
+            callbacks.onAnaliticaActualizada?.(payload);
+            break;
+            
+          default:
+            console.warn(`Evento no manejado: ${event_type}`);
+        }
+        
+        // Callback genérico
+        callbacks.onMessage?.(data);
+        
+      } catch (error) {
+        console.error('❌ Error parseando mensaje WebSocket:', error);
+      }
+    };
+    
+    wsInstance.onerror = (error) => {
+      console.error('❌ WebSocket error:', error);
+      callbacks.onError?.(error);
+    };
+    
+    wsInstance.onclose = (event) => {
+      console.log('WebSocket cerrado:', event.code, event.reason);
+      
+      // Códigos de cierre: https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+      const isAuthError = 
+        event.code === 1008 || // Policy Violation
+        event.code === 4001 || // Custom: Unauthorized
+        event.reason?.toLowerCase().includes('401') ||
+        event.reason?.toLowerCase().includes('unauthorized');
+      
+      if (isAuthError) {
+        console.error('❌ Token inválido/expirado - cerrando sesión');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return; // NO reconectar
       }
       
-      // Refetch lista de ventas
-      fetchVentas();
-    }
+      // Reconectar solo si no alcanzó el límite
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts++;
+        console.log(`↻ Reconectando (intento ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+        setTimeout(() => {
+          connectWebSocket(token, callbacks);
+        }, RECONNECT_DELAY);
+      } else {
+        console.error('❌ Máximo de intentos de reconexión alcanzado');
+        callbacks.onMaxReconnectReached?.();
+      }
+    };
     
-    if (event_type === 'producto_actualizado') {
-      // Refetch lista de productos
-      fetchProductos();
-    }
-  };
-  
-  ws.onerror = (error) => {
-    console.error('❌ WebSocket error:', error);
-  };
-  
-  ws.onclose = (event) => {
-    console.log('WebSocket desconectado', event.code, event.reason);
+    return wsInstance;
     
-    // ⚠️ NO reconectar si fue error de autenticación (token expirado/inválido)
-    // Códigos comúnes: 1008 (policy violation), 4001 (unauthorized custom)
-    const isAuthError = event.code === 1008 || event.code === 4001 || event.reason?.includes('401');
-    
-    if (isAuthError) {
-      console.error('❌ Token inválido/expirado, cerrando sesión...');
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login'; // O navigate('/login')
-      return; // NO reconectar
-    }
-    
-    // ✅ Reconectar solo si fue cierre normal o error de red
-    console.log('↻ Reconectando en 5 segundos...');
-    setTimeout(() => connectWebSocket(token), 5000);
-  };
-  
-  return ws;
+  } catch (error) {
+    console.error('❌ Error creando WebSocket:', error);
+    return null;
+  }
 };
 
-// Solicitar permisos de notificaciones al login
-if (Notification.permission === 'default') {
-  Notification.requestPermission();
-}
+export const disconnectWebSocket = () => {
+  if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
+    wsInstance.close(1000, 'Client disconnect'); // Cierre normal
+    wsInstance = null;
+  }
+};
+
+export const getWebSocketState = () => {
+  if (!wsInstance) return 'CLOSED';
+  const states = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
+  return states[wsInstance.readyState];
+};
+```
+
+**USO EN COMPONENTE:**
+```javascript
+// App.jsx o AuthContext
+import { connectWebSocket, disconnectWebSocket } from './services/websocket.service';
+
+useEffect(() => {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  
+  // Solicitar permisos de notificaciones
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  
+  // Conectar WebSocket
+  const ws = connectWebSocket(token, {
+    onVentaRegistrada: (payload) => {
+      // Refetch ventas y productos
+      queryClient.invalidateQueries(['ventas']);
+      queryClient.invalidateQueries(['productos']);
+      queryClient.invalidateQueries(['notificaciones']);
+    },
+    onProductoActualizado: (payload) => {
+      queryClient.invalidateQueries(['productos']);
+    },
+    onAnaliticaActualizada: (payload) => {
+      // Nuevas alertas detectadas
+      queryClient.invalidateQueries(['notificaciones']);
+    }
+  });
+  
+  // Cleanup al desmontar
+  return () => disconnectWebSocket();
+}, [token]);
+```
+
+**CONFIGURACIÓN .env:**
+```bash
+VITE_WS_URL=wss://xxx.execute-api.us-east-1.amazonaws.com/dev
 ```
 
 ### 6. Validaciones
@@ -657,6 +777,114 @@ Usa este checklist para trackear progreso:
 **Tercer paso:** Implementa LoginPage + AuthContext (FASE 1.1 y 1.2).
 
 **Pregunta antes de continuar:** ¿Entendiste el flujo de autenticación y cómo se usa el JWT en todas las requests?
+
+---
+
+## 🔧 TROUBLESHOOTING - ERRORES COMUNES
+
+### Error 403 en endpoints protegidos (GET /notificacion, etc.)
+
+**Síntomas:**
+- Error: `403 Forbidden`
+- CORS bloqueado (no hay header 'Access-Control-Allow-Origin')
+- El token JWT está correctamente en el header `Authorization: Bearer <token>`
+
+**Causa raíz:**
+El Lambda Authorizer está rechazando la solicitud ANTES de que llegue al Lambda del endpoint.
+Cuando el Authorizer retorna `Deny`, API Gateway responde con 403 y NO incluye headers CORS.
+
+**Diagnóstico paso a paso:**
+
+1. **Verificar token en el frontend:**
+```javascript
+// En el navegador console (DevTools):
+const token = localStorage.getItem('token');
+console.log('Token:', token);
+
+// Decodificar JWT (sin verificar firma):
+const payload = JSON.parse(atob(token.split('.')[1]));
+console.log('Payload:', payload);
+
+// Verificar claims requeridos:
+console.log('codigo_usuario:', payload.codigo_usuario); // Debe existir
+console.log('tenant_id:', payload.tenant_id);         // Debe existir
+console.log('rol:', payload.rol);                     // Debe ser TRABAJADOR/ADMIN/SAAI
+console.log('exp:', new Date(payload.exp * 1000));    // Debe ser futuro
+```
+
+2. **Verificar que el token no esté expirado:**
+```javascript
+const isExpired = payload.exp * 1000 < Date.now();
+console.log('Token expirado:', isExpired);
+if (isExpired) {
+  console.error('⚠️ Token expirado, hacer logout y login nuevamente');
+  localStorage.clear();
+  window.location.href = '/login';
+}
+```
+
+3. **Verificar estructura del request:**
+```javascript
+// En axios interceptor, verificar que se envía correctamente:
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('token');
+  console.log('🔑 Token enviado:', token ? 'Sí' : 'No');
+  console.log('📝 Header Authorization:', config.headers.Authorization);
+  return config;
+});
+```
+
+**Soluciones en orden de prioridad:**
+
+**A) Token expirado → Hacer login nuevamente**
+```javascript
+// En el interceptor de respuesta:
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 403 || error.response?.status === 401) {
+      console.error('⚠️ Token inválido/expirado - redirigiendo a login');
+      localStorage.clear();
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
+**B) Claims faltantes → Problema en el backend al generar JWT**
+- Verificar que el endpoint `/login` retorna un JWT válido con todos los claims
+- El backend debe incluir: `codigo_usuario`, `tenant_id`, `rol`
+
+**C) Token no registrado en tabla de tokens → Hacer login nuevamente**
+- El Authorizer verifica que el token exista en la tabla correspondiente
+- Si hiciste login en otro dispositivo, el token anterior puede estar invalidado
+
+**D) Configuración del Authorizer en serverless.yml (problema backend)**
+- Si TODOS los tokens fallan con 403, el problema está en la configuración
+- Verificar que el authorizer esté correctamente desplegado
+- Ejecutar `sls deploy` nuevamente
+
+**Verificación final (después de login nuevo):**
+```javascript
+// Probar endpoint:
+const testAuth = async () => {
+  try {
+    const response = await api.get('/notificacion?limit=5');
+    console.log('✅ Auth OK:', response.data);
+  } catch (error) {
+    console.error('❌ Auth falló:', error.response?.status, error.response?.data);
+  }
+};
+
+testAuth();
+```
+
+**Nota importante:**
+Si el error persiste después de login nuevo con token válido:
+1. Verificar en AWS CloudWatch Logs del Lambda `authorizer`
+2. Buscar logs con el `codigo_usuario` del token
+3. Identificar cuál validación está fallando
 
 ---
 

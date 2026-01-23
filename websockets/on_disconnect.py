@@ -76,11 +76,13 @@ def handler(event, context):
                     'body': json.dumps({'error': 'Error interno - tenant_id faltante'})
                 }
             
-            # Eliminar la conexión usando delete_item_standard
+            # Eliminar la conexión usando delete_item_standard (hard delete)
+            # Las conexiones WebSocket NO usan soft delete (no son datos de negocio)
             success = delete_item_standard(
                 WS_CONNECTIONS_TABLE,
                 tenant_id,
-                connection_id
+                connection_id,
+                soft_delete=False  # Hard delete para conexiones WebSocket
             )
             
             if success:
