@@ -2248,28 +2248,6 @@ Flujo:
    c. Incrementa contador de enviados/limpiados
 4. Retorna estadísticas del envío
 ________________________________________
-Lambda: LimpiarConexionesInactivas
-Ruta: POST /websockets/cleanup (manual o EventBridge)
-Descripción:
-Lambda de mantenimiento que elimina conexiones WebSocket marcadas como INACTIVAS.
-Útil para limpiar conexiones acumuladas por errores en versiones anteriores o bugs.
-
-Las conexiones WebSocket deben eliminarse completamente (hard delete) cuando están inactivas,
-ya que no son datos de negocio sino estado técnico de la aplicación.
-
-Tablas:
-•	t_ws_connections (SCAN + DELETE hard)
-Servicios:
-•	DynamoDB
-•	Protegido con Authorizer (requiere rol SAAI)
-
-Flujo:
-1. Escanea tabla buscando estado='INACTIVO'
-2. Para cada conexión inactiva encontrada:
-   a. Ejecuta delete_item (hard delete)
-   b. Registra en logs
-3. Retorna estadísticas: encontradas vs eliminadas
-________________________________________
 Eventos realtime confirmados (origen → tipo)
 1.	RegistrarVenta → EmitirEventosWs
 •	tipo: "venta_registrada"

@@ -510,17 +510,6 @@ functions:
     handler: websockets/emitir_eventos_ws.handler
     description: Emitir eventos WebSocket a conexiones de tienda
 
-  LimpiarConexionesInactivas:
-    handler: websockets/limpiar_conexiones_inactivas.handler
-    description: Limpieza de conexiones WebSocket INACTIVAS (mantenimiento)
-    timeout: 60
-    events:
-      - http:
-          path: /websockets/cleanup
-          method: post
-          cors: true
-          authorizer: authorizer
-
   # =================================================================
   # FASE 5: SERVICIOS SNS Y NOTIFICACIONES
   # =================================================================
