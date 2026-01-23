@@ -2179,11 +2179,25 @@ Descripción:
 Se ejecuta cuando el cliente abre una conexión WebSocket.
 Registra la conexión en t_ws_connections asociándola al tenant_id (codigo_tienda) y a la identidad del usuario.
 Esto permite emitir eventos únicamente a conexiones pertenecientes a esa tienda.
+
+Flujo:
+1. Extrae token JWT de queryStringParameters (?token=xxx) o headers (Authorization)
+2. Valida token con verificar_token_jwt()
+3. Extrae tenant_id, codigo_usuario y rol del payload JWT
+4. Guarda conexión en t_ws_connections con TTL de 24 horas
+5. CRÍTICO: Retorna {'statusCode': 200, 'body': json.dumps({'message': 'Connected'})}
+   • API Gateway WebSocket requiere statusCode 200 para mantener conexión abierta
+   • Sin statusCode 200, la conexión se cierra inmediatamente aunque la lógica interna funcione
+
 Tablas:
 •	t_ws_connections (INSERT/PUT)
 Servicios:
 •	API Gateway WebSocket (route: $connect)
 •	No usa SNS
+
+Manejo de errores:
+•	401: Token faltante, inválido, expirado o claims incompletos
+•	500: Error interno (DynamoDB, excepciones no controladas)
 ________________________________________
 Lambda: onDisconnect
 Ruta: Interna (WebSocket API → Lambda)

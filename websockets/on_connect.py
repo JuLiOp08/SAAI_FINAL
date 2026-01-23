@@ -86,9 +86,10 @@ def handler(event, context):
             }
         
         # Extraer datos del payload JWT
+        # NOTA: El JWT usa 'rol' (TRABAJADOR/ADMIN/SAAI) internamente
         tenant_id = payload.get('tenant_id')
         codigo_usuario = payload.get('codigo_usuario')
-        rol = payload.get('rol')
+        rol = payload.get('rol')  # TRABAJADOR, ADMIN, o SAAI
         
         if not tenant_id or not codigo_usuario or not rol:
             logger.error(f"Claims JWT incompletos: tenant={tenant_id}, user={codigo_usuario}, rol={rol}")
@@ -96,6 +97,8 @@ def handler(event, context):
                 'statusCode': 401,
                 'body': json.dumps({'error': 'Claims JWT incompletos'})
             }
+        
+        logger.info(f"Token JWT verificado exitosamente para usuario: {codigo_usuario}")
         
         # Calcular TTL para 24 horas (mismo que JWT)
         import time
@@ -127,6 +130,7 @@ def handler(event, context):
             }
         
         logger.info(f"Conexión WebSocket registrada: {connection_id} para tienda {tenant_id}, usuario {codigo_usuario}")
+        logger.info(f"Item insertado: tabla={WS_CONNECTIONS_TABLE}, tenant={tenant_id}, entity={connection_id}")
         
         return {
             'statusCode': 200,
