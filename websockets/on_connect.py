@@ -100,9 +100,9 @@ def handler(event, context):
         
         logger.info(f"Token JWT verificado exitosamente para usuario: {codigo_usuario}")
         
-        # Calcular TTL para 24 horas (mismo que JWT)
+        # Calcular TTL para 1 hora (auto-limpieza de conexiones zombies)
         import time
-        ttl_seconds = int(time.time()) + (24 * 60 * 60)
+        ttl_seconds = int(time.time()) + (60 * 60)  # 1 hora
         
         # Datos de la conexión WebSocket
         connection_data = {

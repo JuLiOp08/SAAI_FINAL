@@ -471,9 +471,15 @@ export const getWebSocketState = () => {
 };
 ```
 
-**USO EN COMPONENTE:**
+**USO EN COMPONENTE (App.jsx o AuthContext - NIVEL MÁS ALTO):**
+
+⚠️ **CRÍTICO:** El WebSocket debe conectarse **UNA SOLA VEZ** al iniciar sesión y mantenerse abierto durante TODA la sesión. **NO reconectar** al cambiar de página (productos → ventas → notificaciones).
+
+✅ **CORRECTO:** Implementar en **App.jsx** o **AuthContext** (componente raíz)  
+❌ **INCORRECTO:** Implementar en páginas individuales (ProductosPage, VentasPage) - causará reconexiones innecesarias
+
 ```javascript
-// App.jsx o AuthContext
+// App.jsx o AuthContext (NIVEL MÁS ALTO, NO EN PÁGINAS)
 import { connectWebSocket, disconnectWebSocket } from './services/websocket.service';
 
 useEffect(() => {
@@ -485,7 +491,7 @@ useEffect(() => {
     Notification.requestPermission();
   }
   
-  // Conectar WebSocket
+  // Conectar WebSocket UNA SOLA VEZ al iniciar sesión
   const ws = connectWebSocket(token, {
     onVentaRegistrada: (payload) => {
       // Refetch ventas y productos
@@ -502,10 +508,31 @@ useEffect(() => {
     }
   });
   
-  // Cleanup al desmontar
-  return () => disconnectWebSocket();
-}, [token]);
+  // Cleanup solo al desmontar App (logout o cerrar app)
+  return () => {
+    disconnectWebSocket();
+  };
+}, [token]); // Se ejecuta solo cuando cambia el token (login/logout)
+
+// CRÍTICO: Cleanup al cerrar navegador/pestaña
+useEffect(() => {
+  const handleBeforeUnload = () => {
+    disconnectWebSocket();
+  };
+  
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  
+  return () => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+  };
+}, []);
 ```
+
+**VERIFICACIÓN (DevTools Console):**
+- Al hacer login → ver `✅ WebSocket conectado` (1 vez)
+- Al navegar (productos → ventas → notificaciones) → NO debe reconectar
+- Al hacer logout → ver `WebSocket cerrado`
+- Si ves múltiples `✅ WebSocket conectado` al cambiar de página → está mal implementado
 
 **CONFIGURACIÓN .env:**
 ```bash

@@ -51,7 +51,7 @@ provider:
         - ""
         - - "https://"
           - Ref: WebSocketApi
-          - ".execute-api.${self:provider.region}.amazonaws.com/${self:provider.stage}"
+          - ".execute-api.${self:provider.region}.amazonaws.com/${self:provider.stage}/@connections"
     # JWT
     JWT_SECRET: ${env:JWT_SECRET, 'saai-secret-key-2025'}
     JWT_EXPIRES_IN: 86400 # 24 horas
