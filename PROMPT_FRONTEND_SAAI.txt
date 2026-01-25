@@ -5,7 +5,7 @@
 Estoy desarrollando una aplicación web React para **SUPER ADMINISTRADORES** de la plataforma SAAI (Smart Assistant for Inventory). Esta app gestiona TODAS las tiendas del sistema.
 
 **Rol del usuario:** SAAI (Super Admin)
-- Permisos: Gestión global de tiendas, registro de nuevas tiendas, consulta de analítica multi-tenant
+- Permisos: Gestión global de tiendas, registro de nuevas tiendas, consulta de métricas globales simples (conteo de tiendas, estados)
 - NO gestiona productos, ventas, usuarios de tiendas individuales (eso es rol ADMIN)
 - Enfoque: Administración de la plataforma, onboarding de clientes, monitoreo global
 
@@ -15,11 +15,12 @@ Estoy desarrollando una aplicación web React para **SUPER ADMINISTRADORES** de 
 - SNS: Publica eventos BienvenidaSAAI al registrar tienda → crea recursos automáticamente
 - S3: Crea carpetas automáticamente para cada tienda (s3://saai-tiendas/{codigo_tienda}/)
 
-**Frontend:** React + Vite + Tailwind CSS
-- Tailwind CSS para estilos (ya configurado en package.json)
+**Frontend:** React + Vite + CSS
+- CSS puro para estilos (CSS Modules o archivos .css tradicionales)
 - React Router para navegación
 - Axios para llamadas API
 - Context API para estado global
+- WebSocket (OPCIONAL): Solo para eventos informativos globales (no es crítico para operación básica)
 
 ---
 
@@ -108,9 +109,12 @@ saai-plataforma/
 │   │   ├── AppRoutes.jsx
 │   │   └── ProtectedRoute.jsx
 │   └── App.jsx
-├── package.json              # Incluye Tailwind CSS v4.x
-├── vite.config.js            # Con @tailwindcss/vite plugin
-└── tailwind.config.js        # OPCIONAL: Solo si se necesita personalización extra (v4 no lo requiere por defecto)
+├── styles/                   # Estilos CSS
+│   ├── global.css            # Estilos globales
+│   ├── variables.css         # Variables CSS (colores, espaciados)
+│   └── components/           # Estilos por componente
+├── package.json
+└── vite.config.js
 ```
 
 ---
@@ -137,6 +141,13 @@ saai-plataforma/
    - Interceptor response: manejo 401 → logout + redirect /login
      - **PREFERIR:** React Router navigate('/login') si está disponible
      - **FALLBACK:** window.location.href = '/login' solo si no hay router
+
+⚠️ **WebSocket (Opcional):**
+- El frontend SAAI PUEDE conectarse a WebSocket para eventos informativos globales
+- Eventos posibles: `modelos_actualizados` (cuando se entrenan modelos ML globales)
+- NO es crítico para operación básica de gestión de tiendas
+- Si implementas WebSocket, conectar en App.jsx (nivel raíz) al hacer login
+- Refetch GET /tiendas si aplica al recibir eventos
 
 ### FASE 2: Dashboard Global (Vista Principal)
 4. **DashboardSAAIPage**
@@ -291,15 +302,10 @@ const cambiarEstado = async (codigo_tienda, estadoActual, nuevoEstado) => {
     const confirmado = window.confirm(
       '⚠️ Eliminar Tienda\n\nEsta acción no se puede deshacer. La tienda no podrá operar pero sus datos se conservarán.'
     );
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive',
-          onPress: () => actualizarEstado(codigo_tienda, nuevoEstado)
-        }
-      ]
-    );
+    
+    if (confirmado) {
+      actualizarEstado(codigo_tienda, nuevoEstado);
+    }
   } else {
     actualizarEstado(codigo_tienda, nuevoEstado);
   }
@@ -335,20 +341,32 @@ const fetchTiendas = async () => {
 };
 
 // Tabs para filtros
-<View style={styles.tabs}>
-  <Tab active={filtroEstado === 'TODAS'} onPress={() => setFiltroEstado('TODAS')}>
+<div className="tabs-container">
+  <button 
+    className={filtroEstado === 'TODAS' ? 'tab tab-active' : 'tab'} 
+    onClick={() => setFiltroEstado('TODAS')}
+  >
     Todas
-  </Tab>
-  <Tab active={filtroEstado === 'ACTIVA'} onPress={() => setFiltroEstado('ACTIVA')}>
+  </button>
+  <button 
+    className={filtroEstado === 'ACTIVA' ? 'tab tab-active' : 'tab'} 
+    onClick={() => setFiltroEstado('ACTIVA')}
+  >
     Activas
-  </Tab>
-  <Tab active={filtroEstado === 'SUSPENDIDA'} onPress={() => setFiltroEstado('SUSPENDIDA')}>
+  </button>
+  <button 
+    className={filtroEstado === 'SUSPENDIDA' ? 'tab tab-active' : 'tab'} 
+    onClick={() => setFiltroEstado('SUSPENDIDA')}
+  >
     Suspendidas
-  </Tab>
-  <Tab active={filtroEstado === 'ELIMINADA'} onPress={() => setFiltroEstado('ELIMINADA')}>
+  </button>
+  <button 
+    className={filtroEstado === 'ELIMINADA' ? 'tab tab-active' : 'tab'} 
+    onClick={() => setFiltroEstado('ELIMINADA')}
+  >
     Eliminadas
-  </Tab>
-</View>
+  </button>
+</div>
 ```
 
 ### 4. Dashboard - Estadísticas Globales
@@ -373,12 +391,12 @@ const DashboardSAAIPage = () => {
   }, []);
   
   return (
-    <View>
+    <div className="dashboard-container">
       <StatsCard title="Total Tiendas" value={stats.total} icon="store" color="#1E88E5" />
       <StatsCard title="Activas" value={stats.activas} icon="check-circle" color="#43A047" />
       <StatsCard title="Suspendidas" value={stats.suspendidas} icon="pause-circle" color="#FB8C00" />
       <StatsCard title="Eliminadas" value={stats.eliminadas} icon="cancel" color="#E53935" />
-    </View>
+    </div>
   );
 };
 ```
@@ -395,10 +413,10 @@ const EstadoBadge = ({ estado }) => {
   const config = configs[estado] || configs.ACTIVA;
   
   return (
-    <View style={[styles.badge, { backgroundColor: config.color }]}>
-      <Icon name={config.icon} size={16} color="#FFF" />
-      <Text style={styles.badgeText}>{config.text}</Text>
-    </View>
+    <span className="estado-badge" style={{ backgroundColor: config.color }}>
+      <i className={`icon-${config.icon}`}></i>
+      <span className="badge-text">{config.text}</span>
+    </span>
   );
 };
 ```
@@ -463,25 +481,102 @@ const registrarTienda = async (data) => {
 ## ⚠️ ERRORES COMUNES A EVITAR
 
 1. **NO confundas estados de tienda (ACTIVA/SUSPENDIDA/ELIMINADA) con estados de entidades internas (ACTIVO/INACTIVO)**
+   - Estados de tienda: ACTIVA, SUSPENDIDA, ELIMINADA (solo para t_tiendas)
+   - Estados de entidades: ACTIVO, INACTIVO (productos, usuarios, gastos)
+   
 2. **NO permitas reactivar tiendas ELIMINADAS** (transición no permitida)
+   - ACTIVA ↔ SUSPENDIDA ✅
+   - ACTIVA → ELIMINADA ✅
+   - SUSPENDIDA → ELIMINADA ✅
+   - ELIMINADA → cualquier estado ❌
+   
 3. **NO gestiones productos/ventas desde app SAAI** (eso es rol ADMIN)
-4. **NO envíes codigo_tienda** al registrar (backend lo genera)
+   - SAAI solo gestiona TIENDAS (tenants)
+   - NO tiene acceso a datos operativos de tiendas individuales
+   
+4. **NO envíes codigo_tienda** al registrar (backend lo genera automáticamente)
+   - Backend usa t_counters para generar T001, T002, T003...
+   
 5. **NO permitas emails duplicados** (tienda y admin deben ser únicos)
-6. **NO llames a endpoints de otras apps** (/productos, /ventas, /analitica son de ADMIN)
+   - Backend valida unicidad automáticamente
+   
+6. **NO llames a endpoints de otras apps** (/productos, /ventas, /analitica son de ADMIN/TRABAJADOR)
+   - Endpoints SAAI: /login, /tiendas (CRUD)
+   - NO inventar endpoints nuevos sin confirmar con usuario
+   
 7. **NO uses tenant_id** directamente (rol SAAI ve todas las tiendas, no tiene tenant_id específico)
+   - SAAI no pertenece a ninguna tienda específica
+   - El rol 'saai' tiene permisos globales
+   
+8. **NO caches datos de tiendas en localStorage** (siempre refetch para datos actualizados)
+   - Solo cachear token y user info
+   
+9. **NO llames a GET /analitica** (ese endpoint requiere tenant_id que SAAI no tiene)
+   - SAAI solo tiene métricas globales derivadas de GET /tiendas (conteo de estados)
 
 ---
 
-## 🎨 UI/UX RECOMENDACIONES CON TAILWIND CSS
+## 🎨 UI/UX RECOMENDACIONES CON CSS
 
 1. **Layout:** Navbar + Sidebar + Contenido principal
-2. **Dashboard:** Stats Cards responsive con Tailwind
+2. **Dashboard:** Stats Cards responsive con CSS Grid
 3. **TiendaCard:** Grid de cards con hover effects
 4. **Badges de Estado:** ACTIVA (verde), SUSPENDIDA (amarillo), ELIMINADA (rojo)
 5. **Modal Success:** Código de tienda grande, botón copiar (clipboard API)
 6. **Tabs:** Filtros por estado (Todas/Activas/Suspendidas/Eliminadas)
 7. **Formulario:** 2 secciones claras (Tienda + Admin)
-8. **Colors:** Tailwind utility classes (bg-green-100, text-red-800, etc.)
+8. **Colors:** Variables CSS personalizadas (--color-activo, --color-suspendida, etc.)
+
+**Ejemplo de variables CSS:**
+```css
+/* styles/variables.css */
+:root {
+  /* Estados de tienda */
+  --color-activa-bg: #D1FAE5;
+  --color-activa-text: #065F46;
+  --color-suspendida-bg: #FEF3C7;
+  --color-suspendida-text: #92400E;
+  --color-eliminada-bg: #FEE2E2;
+  --color-eliminada-text: #991B1B;
+  
+  /* Colores primarios */
+  --primary: #2563EB;
+  --secondary: #6B7280;
+  --success: #059669;
+  --warning: #F59E0B;
+  --danger: #DC2626;
+  
+  /* Espaciados */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+}
+
+.estado-badge {
+  display: inline-block;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.estado-activa {
+  background: var(--color-activa-bg);
+  color: var(--color-activa-text);
+}
+
+.estado-suspendida {
+  background: var(--color-suspendida-bg);
+  color: var(--color-suspendida-text);
+}
+
+.estado-eliminada {
+  background: var(--color-eliminada-bg);
+  color: var(--color-eliminada-text);
+}
+```
 
 ---
 
@@ -499,7 +594,7 @@ const registrarTienda = async (data) => {
 - [ ] ConfiguracionPage
 - [ ] Validaciones de formularios
 - [ ] Error handling (react-hot-toast)
-- [ ] Loading states (spinners Tailwind)
+- [ ] Loading states (spinners CSS)
 - [ ] Infinite scroll o botón Cargar más
 - [ ] Confirmaciones para acciones críticas (react-modal o window.confirm)
 - [ ] Testing en navegador (Chrome DevTools, responsive mode)

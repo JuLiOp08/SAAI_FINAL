@@ -15,11 +15,12 @@ Estoy desarrollando una aplicación web React para **ADMINISTRADORES DE TIENDA**
 - S3: Descarga de reportes CSV (presigned URLs que expiran en 1h)
 - ML: Predicción de demanda con Holt-Winters (Docker Lambda)
 
-**Frontend:** React + Vite + Tailwind CSS + Chart.js
-- Tailwind CSS para estilos (ya configurado en package.json)
+**Frontend:** React + Vite + CSS + Chart.js
+- CSS puro para estilos (CSS Modules o archivos .css tradicionales)
 - React Router para navegación
 - Axios para llamadas API
 - Context API para estado global (almacenamiento con localStorage para persistencia)
+  - **Nota:** Si usas React Query, usa `queryClient.invalidateQueries()`; si usas Context API puro, usa refetch/dispatch
 - Chart.js o Recharts para gráficos analíticos
 
 ---
@@ -152,9 +153,12 @@ saai-admin/
 │   │   ├── AppRoutes.jsx
 │   │   └── ProtectedRoute.jsx
 │   └── App.jsx
-├── package.json              # Incluye Tailwind CSS v4.x
-├── vite.config.js            # Con @tailwindcss/vite plugin
-└── tailwind.config.js        # OPCIONAL: Solo si se necesita personalización extra (v4 no lo requiere por defecto)
+├── styles/                   # Estilos CSS
+│   ├── global.css            # Estilos globales
+│   ├── variables.css         # Variables CSS (colores, espaciados)
+│   └── components/           # Estilos por componente
+├── package.json
+└── vite.config.js
 ```
 
 ---
@@ -179,6 +183,13 @@ saai-admin/
    - Header con nombre de tienda y logout
 
 ### FASE 2: Productos + Ventas (Herencia de TRABAJADOR)
+
+⚠️ **IMPORTANTE - HERENCIA DE CÓDIGO:**
+- Los módulos Productos y Ventas deben IMPLEMENTARSE EXACTAMENTE IGUAL que en PROMPT_FRONTEND_TRABAJADOR.txt
+- NO duplicar lógica, copiar estructura y servicios
+- Mantener validaciones, error handling y UX idénticas
+- La única diferencia: ADMIN tiene acceso a más módulos (usuarios, gastos, analítica, etc.)
+
 4. **Módulo Productos** (igual que TRABAJADOR)
    - ListaProductosPage
    - CrearProductoPage
@@ -229,6 +240,14 @@ saai-admin/
     - Búsqueda por: descripción, categoría, fecha, monto
 
 ### FASE 5: Dashboard y Analítica (CRÍTICO - LEER CON ATENCIÓN)
+
+⚠️ **SEPARACIÓN CONCEPTUAL (UX):**
+- **DashboardPage:** KPIs rápidos (snapshot), accesos rápidos, alertas top 3, gráfico simple
+- **AnaliticaPage:** Gráficos complejos, series temporales, comparativas, 3 periodos
+- Ambos consumen GET /analitica pero con diferente presentación
+- Dashboard = visión ejecutiva rápida
+- Analítica = análisis profundo con múltiples gráficos
+
 14. **DashboardPage**
     - GET /analitica?periodo=semana (consultar datos pre-calculados)
     - Tarjetas KPI: Total ventas hoy, ingresos del mes, productos sin stock, gastos del mes
@@ -410,7 +429,7 @@ await api.get('/analitica');           // ✅ Documentado
 ```
 ```
 
-### 2. Reportes - CSV con Presigned URLs (Expiran en 1h)
+### 3. Reportes - CSV con Presigned URLs (Expiran en 1h)
 ```javascript
 // ✅ CORRECTO: Generar reporte y abrir/descargar CSV
 const generarReporte = async (tipo, fechas) => {
@@ -534,7 +553,7 @@ const formatearVentasDiarias = (ventasDiarias) => {
 // Usar en Chart.js o Recharts
 <LineChart
   data={formatearVentasDiarias(analitica.ventas_diarias)}
-  width={Dimensions.get('window').width - 40}
+  width={window.innerWidth - 40}
   height={220}
   chartConfig={{...}}
 />
@@ -557,8 +576,9 @@ const formatearVentasDiarias = (ventasDiarias) => {
 - Gráfico de ventas diarias
 - Alertas automáticas (generadas cada 4h por EventBridge)
 
-### Reportes Excel
+### Reportes CSV
 - 4 tipos: Inventario, Ventas, Gastos, General
+- Formato CSV (compatibles con Excel)
 - Descarga directa desde S3
 - Historial de reportes generados
 
@@ -589,10 +609,14 @@ const formatearVentasDiarias = (ventasDiarias) => {
 6. **NO muestres UUIDs** al usuario (solo códigos)
 7. **NO ignores eventos WebSocket** (actualiza UI en tiempo real)
 8. **NO uses categorías hardcodeadas** diferentes a las del backend
+9. **NO elimines físicamente usuarios/gastos** (usar soft delete - estado INACTIVO)
+   - Usuarios: cambiar estado a INACTIVO (NO DELETE)
+   - Gastos: cambiar estado a INACTIVO (NO DELETE)
+   - Guardar motivo_baja, fecha_baja, baja_por para auditoría
 
 ---
 
-## 🎨 UI/UX RECOMENDACIONES CON TAILWIND CSS
+## 🎨 UI/UX RECOMENDACIONES CON CSS
 
 1. **Layout Principal:**
    - Navbar superior: logo, nombre tienda, notificaciones (badge), perfil
@@ -607,29 +631,88 @@ const formatearVentasDiarias = (ventasDiarias) => {
      * 🔮 Predicciones
      * 🔔 Notificaciones
    - Menú hamburguesa (mobile)
-   - Contenido: `<main className="p-6 lg:ml-64 mt-16">`
+   - Contenido: `<main className="app-main">` 
+     - CSS: `.app-main { padding: 24px; margin-left: 256px; margin-top: 64px; }`
 
-2. **Dashboard - KPI Cards (Tailwind):**
+2. **Dashboard - KPI Cards (CSS):**
    ```jsx
-   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-     <div className="bg-white rounded-lg shadow-md p-6">
-       <div className="flex items-center justify-between">
-         <div>
-           <p className="text-gray-500 text-sm">Ventas Hoy</p>
-           <p className="text-3xl font-bold text-gray-900">S/ 1,234.50</p>
+   <div className="kpi-grid">
+     <div className="kpi-card">
+       <div className="kpi-content">
+         <div className="kpi-info">
+           <p className="kpi-label">Ventas Hoy</p>
+           <p className="kpi-value">S/ 1,234.50</p>
          </div>
-         <div className="bg-blue-100 rounded-full p-3">
-           <svg className="w-8 h-8 text-blue-600" />  
+         <div className="kpi-icon kpi-icon-blue">
+           <svg className="icon">...</svg>
          </div>
        </div>
-       <p className="text-green-600 text-sm mt-2">
-         ↑ 12% vs ayer
-       </p>
+       <p className="kpi-trend kpi-trend-up">↑ 12% vs ayer</p>
      </div>
    </div>
+   
+   /* styles/components/KPICard.css */
+   .kpi-grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+     gap: 1.5rem;
+     margin-bottom: 1.5rem;
+   }
+   
+   .kpi-card {
+     background: white;
+     border-radius: 8px;
+     box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06);
+     padding: 1.5rem;
+   }
+   
+   .kpi-content {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+   }
+   
+   .kpi-label {
+     font-size: 0.875rem;
+     color: #6B7280;
+   }
+   
+   .kpi-value {
+     font-size: 1.875rem;
+     font-weight: bold;
+     color: #111827;
+   }
+   
+   .kpi-icon {
+     width: 48px;
+     height: 48px;
+     border-radius: 50%;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+   }
+   
+   .kpi-icon-blue {
+     background: #DBEAFE;
+   }
+   
+   .kpi-icon .icon {
+     width: 32px;
+     height: 32px;
+     color: #2563EB;
+   }
+   
+   .kpi-trend {
+     font-size: 0.875rem;
+     margin-top: 0.5rem;
+   }
+   
+   .kpi-trend-up {
+     color: #059669;
+   }
    ```
 
-3. **Gráficos - Chart.js con Tailwind:**
+3. **Gráficos - Chart.js con CSS:**
    ```bash
    npm install chart.js react-chartjs-2
    ```
@@ -637,8 +720,8 @@ const formatearVentasDiarias = (ventasDiarias) => {
    // LineChart.jsx
    import { Line } from 'react-chartjs-2';
    
-   <div className="bg-white rounded-lg shadow-md p-6">
-     <h3 className="text-lg font-semibold mb-4">Ventas Diarias</h3>
+   <div className="chart-container">
+     <h3 className="chart-title">Ventas Diarias</h3>
      <Line 
        data={chartData} 
        options={{
@@ -649,85 +732,281 @@ const formatearVentasDiarias = (ventasDiarias) => {
        }}
      />
    </div>
+   
+   /* styles/components/Charts.css */
+   .chart-container {
+     background: white;
+     border-radius: 8px;
+     box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06);
+     padding: 1.5rem;
+   }
+   
+   .chart-title {
+     font-size: 1.125rem;
+     font-weight: 600;
+     margin-bottom: 1rem;
+     color: #111827;
+   }
    ```
 
 4. **Tablas Responsive:**
    ```jsx
-   <div className="overflow-x-auto bg-white rounded-lg shadow">
-     <table className="min-w-full divide-y divide-gray-200">
-       <thead className="bg-gray-50">
+   <div className="table-wrapper">
+     <table className="data-table">
+       <thead>
          <tr>
-           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-             Código
-           </th>
-           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-             Nombre
-           </th>
+           <th>Código</th>
+           <th>Nombre</th>
          </tr>
        </thead>
-       <tbody className="bg-white divide-y divide-gray-200">
-         <tr className="hover:bg-gray-50">
-           <td className="px-6 py-4 whitespace-nowrap text-sm">T001P001</td>
-           <td className="px-6 py-4 whitespace-nowrap text-sm">Coca Cola</td>
+       <tbody>
+         <tr>
+           <td>T001P001</td>
+           <td>Coca Cola</td>
          </tr>
        </tbody>
      </table>
    </div>
+   
+   /* styles/components/Table.css */
+   .table-wrapper {
+     overflow-x: auto;
+     background: white;
+     border-radius: 8px;
+     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+   }
+   
+   .data-table {
+     min-width: 100%;
+     border-collapse: separate;
+     border-spacing: 0;
+   }
+   
+   .data-table thead {
+     background: #F9FAFB;
+   }
+   
+   .data-table thead tr {
+     border-bottom: 1px solid #E5E7EB;
+   }
+   
+   .data-table th {
+     padding: 0.75rem 1.5rem;
+     text-align: left;
+     font-size: 0.75rem;
+     font-weight: 500;
+     color: #6B7280;
+     text-transform: uppercase;
+   }
+   
+   .data-table tbody {
+     background: white;
+   }
+   
+   .data-table tbody tr {
+     border-bottom: 1px solid #E5E7EB;
+     transition: background-color 0.15s;
+   }
+   
+   .data-table tbody tr:hover {
+     background: #F9FAFB;
+   }
+   
+   .data-table tbody tr:last-child {
+     border-bottom: none;
+   }
+   
+   .data-table td {
+     padding: 1rem 1.5rem;
+     font-size: 0.875rem;
+     white-space: nowrap;
+   }
    ```
 
 5. **Alertas - Badges por Severidad:**
    ```jsx
    const SeverityBadge = ({ severity }) => {
-     const colors = {
-       CRITICAL: 'bg-red-100 text-red-800',
-       WARNING: 'bg-yellow-100 text-yellow-800',
-       INFO: 'bg-blue-100 text-blue-800'
-     };
-     
      return (
-       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${colors[severity]}`}>
+       <span className={`badge badge-${severity.toLowerCase()}`}>
          {severity}
        </span>
      );
    };
+   
+   /* styles/components/Badge.css */
+   .badge {
+     display: inline-block;
+     padding: 0.25rem 0.5rem;
+     font-size: 0.75rem;
+     font-weight: 600;
+     border-radius: 9999px;
+   }
+   
+   .badge-critical {
+     background: #FEE2E2;
+     color: #991B1B;
+   }
+   
+   .badge-warning {
+     background: #FEF3C7;
+     color: #92400E;
+   }
+   
+   .badge-info {
+     background: #DBEAFE;
+     color: #1E40AF;
+   }
    ```
 
-6. **Modal con Tailwind (Overlay + Card):**
+6. **Modal con CSS (Overlay + Card):**
    ```jsx
    {showModal && (
-     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-       <div className="bg-white rounded-lg p-6 max-w-md w-full">
-         <h2 className="text-xl font-bold mb-4">Crear Producto</h2>
+     <div className="modal-overlay">
+       <div className="modal-card">
+         <h2 className="modal-title">Crear Producto</h2>
          {/* Formulario */}
-         <div className="flex justify-end space-x-2">
-           <button className="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>
-           <button className="px-4 py-2 bg-blue-600 text-white rounded-lg">Guardar</button>
+         <div className="modal-actions">
+           <button className="btn btn-secondary">Cancelar</button>
+           <button className="btn btn-primary">Guardar</button>
          </div>
        </div>
      </div>
    )}
+   
+   /* styles/components/Modal.css */
+   .modal-overlay {
+     position: fixed;
+     inset: 0;
+     background: rgba(0, 0, 0, 0.5);
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     z-index: 50;
+   }
+   
+   .modal-card {
+     background: white;
+     border-radius: 8px;
+     padding: 1.5rem;
+     max-width: 28rem;
+     width: 100%;
+   }
+   
+   .modal-title {
+     font-size: 1.25rem;
+     font-weight: bold;
+     margin-bottom: 1rem;
+   }
+   
+   .modal-actions {
+     display: flex;
+     justify-content: flex-end;
+     gap: 0.5rem;
+   }
+   
+   .btn {
+     padding: 0.5rem 1rem;
+     border: none;
+     border-radius: 8px;
+     cursor: pointer;
+     font-weight: 500;
+   }
+   
+   .btn-secondary {
+     background: #E5E7EB;
+     color: #374151;
+   }
+   
+   .btn-primary {
+     background: #2563EB;
+     color: white;
+   }
    ```
 
 7. **Tabs:**
    ```jsx
-   <div className="border-b border-gray-200">
-     <nav className="flex space-x-8">
-       <button className="py-4 px-1 border-b-2 border-blue-600 text-blue-600 font-medium">
-         Semana
-       </button>
-       <button className="py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700">
-         Mes
-       </button>
+   <div className="tabs-container">
+     <nav className="tabs-nav">
+       <button className="tab tab-active">Semana</button>
+       <button className="tab">Mes</button>
      </nav>
    </div>
+   
+   /* styles/components/Tabs.css */
+   .tabs-container {
+     border-bottom: 1px solid #E5E7EB;
+   }
+   
+   .tabs-nav {
+     display: flex;
+     gap: 2rem;
+   }
+   
+   .tab {
+     padding: 1rem 0.25rem;
+     background: none;
+     border: none;
+     border-bottom: 2px solid transparent;
+     color: #6B7280;
+     cursor: pointer;
+     transition: all 0.2s;
+   }
+   
+   .tab:hover {
+     color: #374151;
+   }
+   
+   .tab-active {
+     border-bottom-color: #2563EB;
+     color: #2563EB;
+     font-weight: 500;
+   }
    ```
 
-8. **Colores por Estado:**
-   - ACTIVO: `bg-green-100 text-green-800`
-   - INACTIVO: `bg-red-100 text-red-800`
-   - Alerta CRITICAL: `bg-red-600 text-white`
-   - Alerta WARNING: `bg-yellow-500 text-white`
-   - Alerta INFO: `bg-blue-500 text-white`
+8. **Colores por Estado (Variables CSS):**
+   ```css
+   /* styles/variables.css */
+   :root {
+     /* Estados */
+     --color-activo-bg: #D1FAE5;
+     --color-activo-text: #065F46;
+     --color-inactivo-bg: #FEE2E2;
+     --color-inactivo-text: #991B1B;
+     
+     /* Alertas */
+     --color-alert-critical-bg: #DC2626;
+     --color-alert-critical-text: white;
+     --color-alert-warning-bg: #F59E0B;
+     --color-alert-warning-text: white;
+     --color-alert-info-bg: #3B82F6;
+     --color-alert-info-text: white;
+   }
+   
+   .estado-activo {
+     background: var(--color-activo-bg);
+     color: var(--color-activo-text);
+   }
+   
+   .estado-inactivo {
+     background: var(--color-inactivo-bg);
+     color: var(--color-inactivo-text);
+   }
+   
+   .alerta-critical {
+     background: var(--color-alert-critical-bg);
+     color: var(--color-alert-critical-text);
+   }
+   
+   .alerta-warning {
+     background: var(--color-alert-warning-bg);
+     color: var(--color-alert-warning-text);
+   }
+   
+   .alerta-info {
+     background: var(--color-alert-info-bg);
+     color: var(--color-alert-info-text);
+   }
+   ```
 
 ---
 
@@ -748,7 +1027,7 @@ const formatearVentasDiarias = (ventasDiarias) => {
 - [ ] NotificacionesPage
 - [ ] WebSocket service completo
 - [ ] Error handling global (react-hot-toast)
-- [ ] Loading states (spinners Tailwind)
+- [ ] Loading states (spinners CSS)
 - [ ] Infinite scroll o botón Cargar más en listas
 - [ ] Testing en navegador (Chrome DevTools, responsive mode)
 

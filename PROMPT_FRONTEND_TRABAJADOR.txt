@@ -432,6 +432,8 @@ export const connectWebSocket = (token, callbacks = {}) => {
         console.error('❌ Token inválido/expirado - cerrando sesión');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        // PREFERIR: navigate('/login') si está disponible
+        // FALLBACK: window.location.href solo si no hay router
         window.location.href = '/login';
         return; // NO reconectar
       }
@@ -865,6 +867,7 @@ console.log('Token expirado:', isExpired);
 if (isExpired) {
   console.error('⚠️ Token expirado, hacer logout y login nuevamente');
   localStorage.clear();
+  // PREFERIR: navigate('/login') si está disponible
   window.location.href = '/login';
 }
 ```
@@ -891,6 +894,7 @@ api.interceptors.response.use(
     if (error.response?.status === 403 || error.response?.status === 401) {
       console.error('⚠️ Token inválido/expirado - redirigiendo a login');
       localStorage.clear();
+      // PREFERIR: navigate('/login') si está disponible
       window.location.href = '/login';
     }
     return Promise.reject(error);
