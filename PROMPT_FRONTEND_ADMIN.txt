@@ -5,8 +5,9 @@
 Estoy desarrollando una aplicación web React para **ADMINISTRADORES DE TIENDA** del sistema SAAI (Smart Assistant for Inventory). Esta es la app más completa de las 3 del ecosistema.
 
 **Rol del usuario:** ADMINISTRADOR/ADMIN
-- Permisos COMPLETOS: Productos, ventas, usuarios, gastos, analítica, reportes, predicciones ML, notificaciones
-- Es el dueño de la tienda, tiene acceso total excepto gestión de otras tiendas
+- Permisos: Usuarios, gastos, analítica, reportes, predicciones ML, notificaciones
+- Es el dueño de la tienda
+- **NO gestiona:** Productos y ventas (eso es rol TRABAJADOR)
 
 **Backend:** AWS Serverless (API Gateway + Lambda + DynamoDB)
 - Autenticación: JWT (Bearer token) - el token se envía en CADA request
@@ -46,13 +47,11 @@ Estoy desarrollando una aplicación web React para **ADMINISTRADORES DE TIENDA**
 - **Módulos relevantes para ADMIN:**
   - 1. AUTH → Login Admin
   - 2. USUARIOS → CRUD completo
-  - 3. PRODUCTOS → CRUD completo
-  - 4. VENTAS → Registrar, listar, buscar
-  - 5. GASTOS → CRUD completo
-  - 6. ANALYTICS → Ver Analítica (NO actualizar manualmente)
-  - 7. REPORTES → Generar 4 tipos, listar historial
-  - 8. PREDICCIONES ML → Predecir demanda
-  - 9. NOTIFICACIONES → Listar
+  - 3. GASTOS → CRUD completo
+  - 4. ANALYTICS → Ver Analítica (NO actualizar manualmente)
+  - 5. REPORTES → Generar 4 tipos, listar historial
+  - 6. PREDICCIONES ML → Predecir demanda
+  - 7. NOTIFICACIONES → Listar
 
 ---
 
@@ -66,14 +65,6 @@ saai-admin/
 │   │   │   └── LoginPage.jsx
 │   │   ├── dashboard/
 │   │   │   └── DashboardPage.jsx          # Vista general con KPIs
-│   │   ├── productos/
-│   │   │   ├── ProductosPage.jsx
-│   │   │   ├── EditarProductoPage.jsx
-│   │   │   └── BuscarProductosPage.jsx
-│   │   ├── ventas/
-│   │   │   ├── RegistrarVentaPage.jsx
-│   │   │   ├── VentasPage.jsx
-│   │   │   └── BuscarVentasPage.jsx
 │   │   ├── usuarios/
 │   │   │   ├── UsuariosPage.jsx
 │   │   │   ├── EditarUsuarioPage.jsx
@@ -106,18 +97,12 @@ saai-admin/
 │   │   │   ├── Tabs.jsx
 │   │   │   └── Spinner.jsx
 │   │   ├── charts/                         # Gráficos para analítica
-│   │   │   ├── LineChart.jsx               # Ventas diarias
-│   │   │   ├── BarChart.jsx                # Productos top
-│   │   │   └── PieChart.jsx                # Distribución ventas
+│   │   │   ├── LineChart.jsx               # Tendencias métricas
+│   │   │   ├── BarChart.jsx                # Comparativas
+│   │   │   └── PieChart.jsx                # Distribuciones
 │   │   ├── dashboard/
 │   │   │   ├── KPICard.jsx                 # Tarjetas métricas
 │   │   │   └── AlertCard.jsx
-│   │   ├── productos/
-│   │   │   ├── ProductCard.jsx
-│   │   │   └── ProductForm.jsx
-│   │   ├── ventas/
-│   │   │   ├── VentaCard.jsx
-│   │   │   └── VentaForm.jsx
 │   │   ├── usuarios/
 │   │   │   ├── UsuarioCard.jsx
 │   │   │   └── UsuarioForm.jsx
@@ -129,8 +114,6 @@ saai-admin/
 │   ├── services/
 │   │   ├── api.js
 │   │   ├── auth.service.js
-│   │   ├── productos.service.js
-│   │   ├── ventas.service.js
 │   │   ├── usuarios.service.js
 │   │   ├── gastos.service.js
 │   │   ├── analitica.service.js
@@ -179,29 +162,10 @@ saai-admin/
    - Error handling genérico
 
 3. **Sidebar + React Router**
-   - Menú lateral con módulos: Dashboard, Productos, Ventas, Usuarios, Gastos, Analítica, Reportes, Predicciones, Notificaciones
+   - Menú lateral con 7 módulos: Dashboard, Usuarios, Gastos, Analítica, Reportes, Predicciones, Notificaciones
    - Header con nombre de tienda y logout
 
-### FASE 2: Productos + Ventas (Herencia de TRABAJADOR)
-
-⚠️ **IMPORTANTE - HERENCIA DE CÓDIGO:**
-- Los módulos Productos y Ventas deben IMPLEMENTARSE EXACTAMENTE IGUAL que en PROMPT_FRONTEND_TRABAJADOR.txt
-- NO duplicar lógica, copiar estructura y servicios
-- Mantener validaciones, error handling y UX idénticas
-- La única diferencia: ADMIN tiene acceso a más módulos (usuarios, gastos, analítica, etc.)
-
-4. **Módulo Productos** (igual que TRABAJADOR)
-   - ListaProductosPage
-   - CrearProductoPage
-   - EditarProductoPage
-   - BuscarProductosPage
-
-5. **Módulo Ventas** (igual que TRABAJADOR)
-   - RegistrarVentaPage
-   - ListaVentasPage
-   - BuscarVentasPage
-
-### FASE 3: Usuarios (Exclusivo ADMIN)
+### FASE 2: Usuarios (Exclusivo ADMIN)
 6. **ListaUsuariosPage**
    - GET /usuarios con paginación
    - Mostrar: código, nombre, email, rol (admin/worker), estado
@@ -220,8 +184,8 @@ saai-admin/
    - POST /usuarios/buscar
    - Búsqueda por: nombre, email, código
 
-### FASE 4: Gastos (Exclusivo ADMIN)
-10. **ListaGastosPage**
+### FASE 3: Gastos (Exclusivo ADMIN)
+7. **ListaGastosPage**
     - GET /gastos con paginación
     - Mostrar: código, descripción, monto, categoría, fecha
     - Filtros por categoría y rango de fechas
@@ -239,23 +203,23 @@ saai-admin/
     - POST /gastos/buscar
     - Búsqueda por: descripción, categoría, fecha, monto
 
-### FASE 5: Dashboard y Analítica (CRÍTICO - LEER CON ATENCIÓN)
+### FASE 4: Dashboard y Analítica (CRÍTICO - LEER CON ATENCIÓN)
 
 ⚠️ **SEPARACIÓN CONCEPTUAL (UX):**
-- **DashboardPage:** KPIs rápidos (snapshot), accesos rápidos, alertas top 3, gráfico simple
+- **DashboardPage:** KPIs rápidos (snapshot), accesos rápidos, alertas top 3
 - **AnaliticaPage:** Gráficos complejos, series temporales, comparativas, 3 periodos
 - Ambos consumen GET /analitica pero con diferente presentación
 - Dashboard = visión ejecutiva rápida
 - Analítica = análisis profundo con múltiples gráficos
 
-14. **DashboardPage**
+10. **DashboardPage**
     - GET /analitica?periodo=semana (consultar datos pre-calculados)
-    - Tarjetas KPI: Total ventas hoy, ingresos del mes, productos sin stock, gastos del mes
-    - Gráfico de ventas (últimos 7 días)
+    - Tarjetas KPI: Ingresos del mes, gastos del mes, ganancia neta, alertas activas
+    - Gráfico de tendencias (gastos vs ingresos)
     - Alertas recientes (top 3) con severidad
-    - Botones rápidos: Registrar venta, Ver analítica completa, Generar reporte
+    - Botones rápidos: Ver analítica completa, Generar reporte, Crear usuario
 
-15. **AnaliticaPage** (⚠️ IMPORTANTE: NO LLAMAR ActualizarAnalitica)
+11. **AnaliticaPage** (⚠️ IMPORTANTE: NO LLAMAR ActualizarAnalitica)
     - GET /analitica?periodo=semana (SOLO CONSULTAR)
     - Tabs: Día, Semana (default), Mes
     - **❌ NUNCA HACER ESTO:** POST /analitica (endpoint NO EXISTE públicamente)
@@ -264,61 +228,58 @@ saai-admin/
     - **✅ CORRECTO:** El tenant_id NO se envía, el backend lo extrae del JWT
     
     Métricas a mostrar:
-    - Ventas totales (con gráfico de línea)
+    - Ingresos totales (con gráfico de línea)
+    - Gastos totales (con gráfico de línea)
     - Ganancias brutas/netas
-    - Promedio de venta
-    - Productos más vendidos (top 5, gráfico de barras)
-    - Ventas diarias (gráfico de línea)
+    - Usuarios activos/inactivos
+    - Categorías de gastos (gráfico de barras)
     - Alertas automáticas:
-      * Ventas cero en periodo (CRITICAL)
       * Ganancia baja < 10% de ingresos (WARNING)
-      * Productos sin stock (CRITICAL)
-      * Stock bajo ≤ 5 unidades (WARNING)
+      * Gastos superan ingresos (CRITICAL)
 
-16. **Gráficos (Chart.js o Recharts)**
-    - LineChart para ventas diarias
-    - BarChart para productos top
-    - PieChart para distribución de ventas por categoría
+12. **Gráficos (Chart.js o Recharts)**
+    - LineChart para ingresos/gastos diarios
+    - BarChart para categorías de gastos
+    - PieChart para distribución de gastos por categoría
 
-### FASE 6: Reportes (Exclusivo ADMIN)
-17. **GenerarReportesPage**
+### FASE 5: Reportes (Exclusivo ADMIN)
+13. **GenerarReportesPage**
     - 4 botones: Inventario, Ventas, Gastos, General
     - Formulario para reportes de periodo (fecha_inicio, fecha_fin)
     - POST /reportes/{tipo}
     - Mostrar download_url generado
     - Botón para abrir URL (window.open o descarga automática con elemento <a>)
 
-18. **HistorialReportesPage**
+14. **HistorialReportesPage**
     - GET /reportes/historial
     - Lista de reportes generados
     - Mostrar: código, tipo, fecha, tamaño
     - Botón descargar en cada item
     - **IMPORTANTE:** Los URLs son presigned (expiran en 1h), se regeneran en cada consulta
 
-### FASE 7: Predicciones ML (Exclusivo ADMIN)
-19. **PrediccionDemandaPage**
+### FASE 6: Predicciones ML (Exclusivo ADMIN)
+15. **PrediccionDemandaPage**
     - Selector de producto (dropdown o autocomplete)
     - POST /predicciones con codigo_producto
+    - **IMPORTANTE:** Este módulo predice demanda de productos, pero ADMIN no gestiona inventario
+    - **USO:** Solo visualización de predicciones para toma de decisiones
     - Mostrar:
       - Demanda mañana (unidades)
       - Demanda próxima semana (7 días)
-      - Stock actual vs demanda → alerta si stock < demanda
+      - Alerta si predicción indica necesidad de reabastecimiento
     - Gráfico de predicción (7 días)
-    - Botón "Reabastecer" que navega a EditarProductoPage con stock sugerido
 
-### FASE 8: Notificaciones y WebSocket (CRÍTICO)
-20. **NotificacionesPage** (similar a TRABAJADOR pero con más tipos)
+### FASE 7: Notificaciones y WebSocket (CRÍTICO)
+16. **NotificacionesPage** (tipos específicos ADMIN)
     - GET /notificacion
     - Tipos de alertas:
-      - stock_bajo, sin_stock
-      - venta_registrada
       - ganancia_baja
-      - ventas_cero
-      - stockBajoManana, stockBajoProximaSemana (predicciones)
+      - gastos_altos
+      - stockBajoManana, stockBajoProximaSemana (predicciones - solo informativo)
     - Badge con contador de no leídas
     - Severidad: INFO, WARNING, CRITICAL
 
-21. **WebSocket Service Completo**
+17. **WebSocket Service Completo**
     
     **FORMATO OFICIAL (VERIFICADO EN SAAI_oficial.txt):**
     - Autenticación: `?token=${token}` en query string
@@ -326,15 +287,11 @@ saai-admin/
     - Estructura de eventos: `{ event_type: string, payload: object }`
     
     **EVENTOS DISPONIBLES (ROL ADMIN):**
-    1. `venta_registrada` → emitido por RegistrarVenta
-       - Refetch: ventas, productos, analitica (si necesario), notificaciones
-    2. `producto_actualizado` → emitido por ActualizarProducto
-       - Refetch: productos
-    3. `analitica_actualizada` → emitido por ActualizarAnalitica (cada 4h)
+    1. `analitica_actualizada` → emitido por ActualizarAnalitica (cada 4h)
        - **CRÍTICO**: Refetch GET /analitica (NO existe POST /analitica)
        - Refetch: notificaciones (nuevas alertas detectadas)
-    4. `prediccion_generada` → emitido por PrediccionDemanda
-       - Refetch: notificaciones (alertas de stock vs demanda)
+    2. `prediccion_generada` → emitido por PrediccionDemanda
+       - Refetch: notificaciones (alertas de predicciones)
     
     **IMPLEMENTACIÓN:**
     ```javascript
@@ -343,15 +300,6 @@ saai-admin/
     
     // Callbacks específicos ADMIN:
     const ws = connectWebSocket(token, {
-      onVentaRegistrada: (payload) => {
-        queryClient.invalidateQueries(['ventas']);
-        queryClient.invalidateQueries(['productos']);
-        queryClient.invalidateQueries(['analitica']); // Métricas actualizadas
-        queryClient.invalidateQueries(['notificaciones']);
-      },
-      onProductoActualizado: (payload) => {
-        queryClient.invalidateQueries(['productos']);
-      },
       onAnaliticaActualizada: (payload) => {
         // EventBridge acaba de ejecutar ActualizarAnalitica
         queryClient.invalidateQueries(['analitica']);
@@ -540,19 +488,26 @@ useEffect(() => {
 
 ### 7. Gráficos - Formatear Datos
 ```javascript
-// Formatear ventas diarias para LineChart
-const formatearVentasDiarias = (ventasDiarias) => {
+// Formatear ingresos/gastos para LineChart
+const formatearMetricas = (analitica) => {
   return {
-    labels: ventasDiarias.map(v => v.fecha.slice(5, 10)), // MM-DD
-    datasets: [{
-      data: ventasDiarias.map(v => v.total)
-    }]
+    labels: analitica.periodo.semana.fechas.map(f => f.slice(5, 10)), // MM-DD
+    datasets: [
+      {
+        label: 'Ingresos',
+        data: analitica.periodo.semana.ingresos_diarios
+      },
+      {
+        label: 'Gastos',
+        data: analitica.periodo.semana.gastos_diarios
+      }
+    ]
   };
 };
 
 // Usar en Chart.js o Recharts
 <LineChart
-  data={formatearVentasDiarias(analitica.ventas_diarias)}
+  data={formatearMetricas(analitica)}
   width={window.innerWidth - 40}
   height={220}
   chartConfig={{...}}
@@ -564,16 +519,16 @@ const formatearVentasDiarias = (ventasDiarias) => {
 ## 📊 FEATURES EXCLUSIVAS ADMIN
 
 ### Dashboard Ejecutivo
-- KPIs en tarjetas: ventas hoy, ingresos mes, productos sin stock, gastos mes
-- Gráfico de ventas (últimos 7 días)
+- KPIs en tarjetas: ingresos mes, gastos mes, ganancia neta, usuarios activos
+- Gráfico de tendencias (ingresos vs gastos)
 - Alertas recientes (top 3)
 - Accesos rápidos
 
 ### Analítica Completa
 - 3 periodos: día, semana, mes
-- Métricas: ventas, ingresos, gastos, ganancias, promedio venta
-- Productos top vendidos
-- Gráfico de ventas diarias
+- Métricas: ingresos, gastos, ganancias, usuarios
+- Categorías de gastos
+- Gráfico de ingresos/gastos diarios
 - Alertas automáticas (generadas cada 4h por EventBridge)
 
 ### Reportes CSV
@@ -613,6 +568,9 @@ const formatearVentasDiarias = (ventasDiarias) => {
    - Usuarios: cambiar estado a INACTIVO (NO DELETE)
    - Gastos: cambiar estado a INACTIVO (NO DELETE)
    - Guardar motivo_baja, fecha_baja, baja_por para auditoría
+10. **NO intentes gestionar productos/ventas** (eso es exclusivo de rol TRABAJADOR)
+    - ADMIN solo ve métricas analíticas ya calculadas
+    - Las predicciones son solo informativas
 
 ---
 
@@ -620,10 +578,8 @@ const formatearVentasDiarias = (ventasDiarias) => {
 
 1. **Layout Principal:**
    - Navbar superior: logo, nombre tienda, notificaciones (badge), perfil
-   - Sidebar izquierdo (desktop) con 9 módulos:
+   - Sidebar izquierdo (desktop) con 7 módulos:
      * 🏠 Dashboard
-     * 📦 Productos
-     * 💰 Ventas
      * 👥 Usuarios
      * 💸 Gastos
      * 📊 Analítica
@@ -640,8 +596,8 @@ const formatearVentasDiarias = (ventasDiarias) => {
      <div className="kpi-card">
        <div className="kpi-content">
          <div className="kpi-info">
-           <p className="kpi-label">Ventas Hoy</p>
-           <p className="kpi-value">S/ 1,234.50</p>
+           <p className="kpi-label">Ingresos Mes</p>
+           <p className="kpi-value">S/ 12,450.00</p>
          </div>
          <div className="kpi-icon kpi-icon-blue">
            <svg className="icon">...</svg>
@@ -1015,15 +971,13 @@ const formatearVentasDiarias = (ventasDiarias) => {
 - [ ] LoginPage + AuthContext
 - [ ] Sidebar + React Router
 - [ ] DashboardPage con KPIs
-- [ ] Módulo Productos completo
-- [ ] Módulo Ventas completo
 - [ ] Módulo Usuarios completo
 - [ ] Módulo Gastos completo
 - [ ] AnaliticaPage con gráficos
 - [ ] WebSocket listener para 'analitica_actualizada'
 - [ ] GenerarReportesPage (4 tipos)
 - [ ] HistorialReportesPage
-- [ ] PrediccionDemandaPage
+- [ ] PrediccionDemandaPage (solo visualización)
 - [ ] NotificacionesPage
 - [ ] WebSocket service completo
 - [ ] Error handling global (react-hot-toast)
@@ -1041,10 +995,10 @@ const formatearVentasDiarias = (ventasDiarias) => {
 
 **Tercer paso:** Implementa LoginPage + AuthContext + Sidebar (FASE 1).
 
-**Cuarto paso:** Implementa DashboardPage con KPIs básicos (FASE 5.14).
+**Cuarto paso:** Implementa DashboardPage con KPIs básicos (FASE 4.10).
 
-**Pregunta clave:** ¿Entendiste que ActualizarAnalitica NO se llama desde frontend y que WebSocket notifica cuando hay datos nuevos?
+**Pregunta clave:** ¿Entendiste que ADMIN NO gestiona productos/ventas (eso es TRABAJADOR) y que ActualizarAnalitica NO se llama desde frontend?
 
 ---
 
-¡Empecemos con el módulo más complejo! Dime cuando hayas leído los archivos de referencia y estés listo para implementar el DashboardPage con analítica.
+¡Empecemos! Esta es la app de gestión administrativa y reportería. Dime cuando hayas leído los archivos de referencia y estés listo para implementar el DashboardPage con analítica.

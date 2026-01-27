@@ -6,7 +6,7 @@ Estoy desarrollando una aplicación web React para **SUPER ADMINISTRADORES** de 
 
 **Rol del usuario:** SAAI (Super Admin)
 - Permisos: Gestión global de tiendas, registro de nuevas tiendas, consulta de métricas globales simples (conteo de tiendas, estados)
-- NO gestiona productos, ventas, usuarios de tiendas individuales (eso es rol ADMIN)
+- NO gestiona productos, ventas (eso es rol TRABAJADOR), ni usuarios de tiendas individuales (eso es rol ADMIN)
 - Enfoque: Administración de la plataforma, onboarding de clientes, monitoreo global
 
 **Backend:** AWS Serverless (API Gateway + Lambda + DynamoDB)
@@ -470,8 +470,8 @@ const registrarTienda = async (data) => {
   - Email de bienvenida
 
 ### Restricciones
-- ❌ No gestiona productos de tiendas individuales
-- ❌ No gestiona ventas de tiendas individuales
+- ❌ No gestiona productos de tiendas individuales (rol TRABAJADOR)
+- ❌ No gestiona ventas de tiendas individuales (rol TRABAJADOR)
 - ❌ No gestiona usuarios internos de tiendas (eso es rol ADMIN)
 - ❌ No genera reportes de tiendas individuales
 - ❌ No ve analítica detallada de tiendas (solo overview global)
@@ -490,7 +490,7 @@ const registrarTienda = async (data) => {
    - SUSPENDIDA → ELIMINADA ✅
    - ELIMINADA → cualquier estado ❌
    
-3. **NO gestiones productos/ventas desde app SAAI** (eso es rol ADMIN)
+3. **NO gestiones productos/ventas desde app SAAI** (eso es rol TRABAJADOR)
    - SAAI solo gestiona TIENDAS (tenants)
    - NO tiene acceso a datos operativos de tiendas individuales
    
@@ -500,7 +500,7 @@ const registrarTienda = async (data) => {
 5. **NO permitas emails duplicados** (tienda y admin deben ser únicos)
    - Backend valida unicidad automáticamente
    
-6. **NO llames a endpoints de otras apps** (/productos, /ventas, /analitica son de ADMIN/TRABAJADOR)
+6. **NO llames a endpoints de otras apps** (/productos y /ventas son de TRABAJADOR, /analitica es de ADMIN)
    - Endpoints SAAI: /login, /tiendas (CRUD)
    - NO inventar endpoints nuevos sin confirmar con usuario
    
