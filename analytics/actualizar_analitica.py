@@ -238,10 +238,40 @@ def handler(event, context):
             # Fin del loop de periodos para esta tienda
         
             # =================================================================
-            # PUBLICAR ALERTAS EN SNS (solo las de semana)
+            # PUBLICAR ALERTAS EN SNS (solo las de semana Y solo las NUEVAS)
             # =================================================================
             if ALERTAS_TOPIC_ARN and alertas_semana:
-                await_publiar_alertas_sns(tenant_id, alertas_semana, 'SYSTEM_EVENTBRIDGE')
+                # Obtener analítica anterior para comparar alertas
+                try:
+                    analitica_anterior = get_item_standard(
+                        table_name=os.environ['ANALITICA_TABLE'],
+                        tenant_id=tenant_id,
+                        entity_id='semana'
+                    )
+                    
+                    # Extraer tipos de alertas anteriores
+                    alertas_anteriores_tipos = set()
+                    if analitica_anterior:
+                        alertas_previas = analitica_anterior.get('alertas_detectadas', [])
+                        alertas_anteriores_tipos = {a.get('tipo') for a in alertas_previas if a.get('tipo')}
+                    
+                    # Filtrar solo alertas NUEVAS (que no estaban en el cálculo anterior)
+                    alertas_nuevas = [
+                        alerta for alerta in alertas_semana
+                        if alerta.get('tipo') not in alertas_anteriores_tipos
+                    ]
+                    
+                    # Publicar solo alertas nuevas
+                    if alertas_nuevas:
+                        await_publiar_alertas_sns(tenant_id, alertas_nuevas, 'SYSTEM_EVENTBRIDGE')
+                        logger.info(f"  📤 {len(alertas_nuevas)} alertas NUEVAS publicadas a SNS (de {len(alertas_semana)} detectadas)")
+                    else:
+                        logger.info(f"  ℹ️ No hay alertas nuevas para publicar ({len(alertas_semana)} ya existían)")
+                
+                except Exception as e_alertas:
+                    # Si falla la comparación, publicar todas por seguridad
+                    logger.warning(f"  ⚠️ Error comparando alertas anteriores: {str(e_alertas)}, publicando todas")
+                    await_publiar_alertas_sns(tenant_id, alertas_semana, 'SYSTEM_EVENTBRIDGE')
         
             logger.info(f"  ✅ Tienda {tenant_id} completada: {resultados_guardados}/3 periodos guardados")
             total_periodos_guardados += resultados_guardados
@@ -567,7 +597,7 @@ def await_publiar_alertas_sns(tenant_id, alertas, codigo_usuario):
     try:
         for alerta in alertas:
             message_body = {
-                "titulo": f"Alerta Analítica: {alerta['tipo']}",
+                "titulo": f"Alerta Analitica: {alerta['tipo']}",
                 "mensaje": alerta['mensaje'],
                 "detalle": {
                     "tipo_calculo": "analitica_automatica",
