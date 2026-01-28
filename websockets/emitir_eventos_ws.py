@@ -120,13 +120,10 @@ def handler(event, context):
             region_name=REGION
         )
         
-        # Preparar mensaje a enviar
-        timestamp_lima = obtener_fecha_hora_peru()
+        # Construir mensaje WebSocket (formato oficial SAAI)
         ws_message = {
             'event_type': event_type,
-            'tenant_id': tenant_id,
-            'timestamp': timestamp_lima,
-            'data': payload
+            'payload': payload if payload else {}
         }
         message_data = json.dumps(ws_message).encode('utf-8')
         

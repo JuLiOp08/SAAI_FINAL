@@ -2247,6 +2247,59 @@ Flujo:
    b. Si falla con GoneException → hard delete de la conexión
    c. Incrementa contador de enviados/limpiados
 4. Retorna estadísticas del envío
+
+FORMATO OFICIAL DEL MENSAJE WEBSOCKET (enviado al cliente):
+```json
+{
+  "event_type": "string",
+  "payload": {
+    // Datos específicos del evento (opcional, depende del tipo)
+  }
+}
+```
+
+CAMPOS:
+• event_type (REQUERIDO): Tipo de evento ("venta_registrada", "analitica_actualizada", "prediccion_generada")
+• payload (OPCIONAL): Datos adicionales del evento. Puede ser {} o null si el evento solo notifica refetch
+
+EJEMPLOS:
+
+1. analitica_actualizada (solo notifica, frontend hace refetch):
+```json
+{
+  "event_type": "analitica_actualizada",
+  "payload": {}
+}
+```
+
+2. venta_registrada (solo notifica, frontend hace refetch):
+```json
+{
+  "event_type": "venta_registrada",
+  "payload": {}
+}
+```
+
+3. prediccion_generada (incluye datos, frontend los muestra directamente):
+```json
+{
+  "event_type": "prediccion_generada",
+  "payload": {
+    "codigo_producto": "T002P001",
+    "nombre_producto": "Coca Cola",
+    "demanda_manana": 5,
+    "demanda_proxima_semana": 35,
+    "stock_actual": 2,
+    "alerta": "stockBajoManana"
+  }
+}
+```
+
+NOTAS IMPORTANTES:
+• NO incluir tenant_id en el mensaje (conexión ya está asociada a tenant)
+• NO incluir timestamp (frontend usa su hora local)
+• Mantener payload simple y solo con datos necesarios
+• Frontend decide cómo manejar cada event_type (refetch o mostrar datos)
 ________________________________________
 Eventos realtime confirmados (origen → tipo)
 1.	RegistrarVenta → EmitirEventosWs
