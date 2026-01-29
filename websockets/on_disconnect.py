@@ -37,8 +37,9 @@ def handler(event, context):
                 'body': json.dumps({'error': 'Connection ID requerido'})
             }
         
-        # Para la desconexión, buscamos la conexión usando un GSI
-        # entity_id = connection_id según modelo estándar SAAI
+        # Para la desconexión, buscamos la conexión usando scan
+        # NOTA: Scan sin FilterExpression para traer TODOS los items, luego filtramos en Python
+        # porque entity_id es SORT KEY (no accesible en FilterExpression)
         
         # Buscar la conexión en DynamoDB para obtener el tenant_id
         import boto3
@@ -48,25 +49,25 @@ def handler(event, context):
         table = dynamodb.Table(WS_CONNECTIONS_TABLE)
         
         try:
-            # Scan para encontrar tenant_id por connection_id
-            # En producción, considera agregar GSI: entity_id-index
-            response = table.scan(
-                FilterExpression='entity_id = :conn_id',
-                ExpressionAttributeValues={
-                    ':conn_id': connection_id
-                },
-                Limit=1
-            )
+            # Scan COMPLETO de la tabla (sin FilterExpression)
+            # En producción: considerar GSI con entity_id como partition key
+            response = table.scan()
             
-            if not response.get('Items'):
+            # Filtrar manualmente por connection_id (entity_id)
+            connection_item = None
+            for item in response.get('Items', []):
+                if item.get('entity_id') == connection_id:
+                    connection_item = item
+                    break
+            
+            if not connection_item:
                 logger.warning(f"Conexión no encontrada para cleanup: {connection_id}")
                 return {
                     'statusCode': 200,
                     'body': json.dumps({'message': 'Conexión no encontrada, posiblemente ya eliminada'})
                 }
             
-            # Obtener la primera (y única) conexión encontrada
-            connection_item = response['Items'][0]
+            # Obtener tenant_id de la conexión encontrada
             tenant_id = connection_item.get('tenant_id')
             
             if not tenant_id:
