@@ -8,6 +8,7 @@ from utils import (
     parse_request_body,
     log_request,
     extract_tenant_from_jwt_claims,
+    verificar_rol_permitido,
     query_by_tenant,
     extract_pagination_params,
     create_next_token

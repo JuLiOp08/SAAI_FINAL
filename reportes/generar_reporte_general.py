@@ -16,6 +16,7 @@ from utils import (
     obtener_fecha_hora_peru,
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
+    verificar_rol_permitido,
     put_item_standard,
     query_by_tenant,
     increment_counter,
