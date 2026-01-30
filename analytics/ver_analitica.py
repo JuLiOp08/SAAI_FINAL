@@ -10,6 +10,7 @@ from utils import (
     get_item_standard,
     query_by_tenant
 )
+from utils.datetime_utils import PERU_TIMEZONE
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -84,8 +85,8 @@ def handler(event, context):
         
         logger.warning(f"⚠️ No se encontró analítica '{periodo}' para {tenant_id}")
         
-        # Calcular fechas para estructura vacía
-        fecha_calc = datetime.now(timezone.utc)
+        # Calcular fechas para estructura vacía - usar hora de Perú
+        fecha_calc = datetime.now(PERU_TIMEZONE)
         if periodo == 'dia':
             fecha_inicio = fecha_calc
             dias = 1
@@ -105,8 +106,7 @@ def handler(event, context):
             },
             "ventas": {
                 "total_ventas": 0,
-                "total_ingresos": 0.0,
-                "promedio_diario": 0.0
+                "total_ingresos": 0.0
             },
             "gastos": {
                 "total_gastos": 0,
@@ -125,6 +125,7 @@ def handler(event, context):
             },
             "productos_top": [],
             "ventas_diarias": generar_ventas_diarias_vacias(fecha_inicio, fecha_calc),
+            "ventas_por_trabajador": [],
             "alertas_detectadas": [
                 {
                     "tipo": "sinDatos",

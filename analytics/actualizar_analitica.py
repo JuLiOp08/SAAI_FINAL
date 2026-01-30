@@ -15,6 +15,7 @@ from utils import (
     put_item_standard,
     get_item_standard
 )
+from utils.datetime_utils import PERU_TIMEZONE
 from constants import THRESHOLD_GANANCIA_BAJA, THRESHOLD_STOCK_BAJO
 
 logger = logging.getLogger()
@@ -52,8 +53,8 @@ def handler(event, context):
             logger.warning("⚠️ ActualizarAnalitica llamado desde API Gateway (solo debe ejecutarse desde EventBridge)")
             return error_response("Este endpoint solo se ejecuta automáticamente desde EventBridge", 403)
         
-        # Fecha de cálculo (hoy)
-        fecha_calc = datetime.now(timezone.utc)
+        # Fecha de cálculo (hoy) - usar hora de Perú
+        fecha_calc = datetime.now(PERU_TIMEZONE)
         fecha_str = fecha_calc.strftime('%Y-%m-%d')
         
         logger.info(f"🔄 Iniciando cálculo de analítica para TODAS las tiendas activas - Fecha {fecha_str}")
@@ -159,6 +160,9 @@ def handler(event, context):
                 # 7. VENTAS DIARIAS del período
                 ventas_diarias = calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin)
                 
+                # 8. VENTAS POR TRABAJADOR del período
+                ventas_por_trabajador = calcular_ventas_por_trabajador(tenant_id, fecha_inicio, fecha_fin)
+                
                 # Construir resultado analítico (convertir floats a Decimal)
                 analitica_data = {
                     "periodo": {
@@ -173,6 +177,7 @@ def handler(event, context):
                     "usuarios": usuarios_tienda,
                     "productos_top": productos_top,
                     "ventas_diarias": [convert_floats_to_decimal(v) for v in ventas_diarias],
+                    "ventas_por_trabajador": [convert_floats_to_decimal(v) for v in ventas_por_trabajador],
                     "alertas_detectadas": [],
                     "updated_at": obtener_fecha_hora_peru()
                 }
@@ -344,17 +349,15 @@ def calcular_ventas_periodo(tenant_id, fecha_inicio, fecha_fin):
         ventas = result.get('items', [])
         total_ventas = len(ventas)
         total_ingresos = sum(float(v.get('total', 0)) for v in ventas)
-        promedio_diario = total_ventas / 7.0 if total_ventas > 0 else 0
         
         return {
             "total_ventas": total_ventas,
-            "total_ingresos": round(total_ingresos, 2),
-            "promedio_diario": round(promedio_diario, 1)
+            "total_ingresos": round(total_ingresos, 2)
         }
         
     except Exception as e:
         logger.error(f"Error calculando ventas período: {str(e)}")
-        return {"total_ventas": 0, "total_ingresos": 0.0, "promedio_diario": 0.0}
+        return {"total_ventas": 0, "total_ingresos": 0.0}
 
 def calcular_gastos_periodo(tenant_id, fecha_inicio, fecha_fin):
     """Calcula métricas de gastos para el período usando utils"""
@@ -563,6 +566,91 @@ def calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin):
         
     except Exception as e:
         logger.error(f"Error calculando ventas diarias: {str(e)}")
+        return []
+
+def calcular_ventas_por_trabajador(tenant_id, fecha_inicio, fecha_fin):
+    """Calcula ventas por trabajador del período usando utils"""
+    try:
+        from boto3.dynamodb.conditions import Attr
+        
+        # Query ventas del período usando utils (estado COMPLETADA)
+        filter_expression = (
+            Attr('data.fecha').between(
+                fecha_inicio.strftime('%Y-%m-%d'), 
+                fecha_fin.strftime('%Y-%m-%d')
+            ) & Attr('data.estado').eq('COMPLETADA')
+        )
+        
+        result = query_by_tenant(
+            table_name=os.environ['VENTAS_TABLE'],
+            tenant_id=tenant_id,
+            filter_expression=filter_expression
+        )
+        
+        ventas = result.get('items', [])
+        trabajadores = {}
+        
+        # Contabilizar ventas por trabajador
+        for venta in ventas:
+            codigo_usuario = venta.get('codigo_usuario')
+            total = float(venta.get('total', 0))
+            
+            if not codigo_usuario:
+                continue
+            
+            if codigo_usuario not in trabajadores:
+                trabajadores[codigo_usuario] = {
+                    'codigo_usuario': codigo_usuario,
+                    'nombre_usuario': None,
+                    'total_ventas': 0,
+                    'total_ingresos': 0
+                }
+            
+            trabajadores[codigo_usuario]['total_ventas'] += 1
+            trabajadores[codigo_usuario]['total_ingresos'] += total
+        
+        # Obtener nombres de trabajadores de t_usuarios
+        for codigo_usuario in trabajadores.keys():
+            try:
+                usuario_data = get_item_standard(
+                    table_name=os.environ['USUARIOS_TABLE'],
+                    tenant_id=tenant_id,
+                    entity_id=codigo_usuario
+                )
+                
+                if usuario_data:
+                    rol = usuario_data.get('rol', usuario_data.get('role', '')).upper()
+                    # Solo incluir trabajadores (filtrar admins)
+                    if rol in ['TRABAJADOR', 'WORKER']:
+                        nombre = usuario_data.get('nombre', codigo_usuario)
+                        trabajadores[codigo_usuario]['nombre_usuario'] = nombre
+                    else:
+                        # Marcar para eliminar si no es trabajador
+                        trabajadores[codigo_usuario] = None
+            except Exception as e:
+                logger.warning(f"Error obteniendo usuario {codigo_usuario}: {str(e)}")
+                trabajadores[codigo_usuario]['nombre_usuario'] = codigo_usuario
+        
+        # Filtrar trabajadores None (admins) y ordenar por total_ventas
+        trabajadores_validos = [
+            t for t in trabajadores.values() 
+            if t is not None
+        ]
+        
+        trabajadores_ordenados = sorted(
+            trabajadores_validos,
+            key=lambda x: x['total_ventas'],
+            reverse=True
+        )
+        
+        # Redondear ingresos
+        for trabajador in trabajadores_ordenados:
+            trabajador['total_ingresos'] = round(trabajador['total_ingresos'], 2)
+        
+        return trabajadores_ordenados
+        
+    except Exception as e:
+        logger.error(f"Error calculando ventas por trabajador: {str(e)}")
         return []
 
 def obtener_stock_producto(tenant_id, codigo_producto):
