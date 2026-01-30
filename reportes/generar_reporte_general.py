@@ -54,6 +54,11 @@ def handler(event, context):
     try:
         log_request(event, context)
         
+        # Verificar rol ADMIN
+        tiene_permiso, error = verificar_rol_permitido(event, ['ADMIN'])
+        if not tiene_permiso:
+            return error
+        
         # JWT validation + tenant
         tenant_id = extract_tenant_from_jwt_claims(event)
         user_info = extract_user_from_jwt_claims(event)

@@ -9,6 +9,7 @@ from utils import (
     parse_request_body,
     log_request,
     extract_tenant_from_jwt_claims,
+    verificar_rol_permitido,
     query_by_tenant,
     decimal_to_float
 )
@@ -47,6 +48,11 @@ def handler(event, context):
     """
     try:
         log_request(event)
+        
+        # Verificar rol ADMIN
+        tiene_permiso, error = verificar_rol_permitido(event, ['ADMIN'])
+        if not tiene_permiso:
+            return error
         
         # Extraer tenant_id del JWT
         tenant_id = extract_tenant_from_jwt_claims(event)

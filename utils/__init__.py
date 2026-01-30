@@ -49,7 +49,8 @@ from .response_utils import (
     options_response,
     log_request,
     extract_tenant_from_jwt_claims,
-    extract_user_from_jwt_claims
+    extract_user_from_jwt_claims,
+    verificar_rol_permitido
 )
 
 from .dynamodb_utils import (

@@ -22,7 +22,8 @@ def handler(event, context):
     """
     POST /ventas/buscar - Buscar ventas por criterios
     
-    Según documento SAAI (TRABAJADOR):
+    Roles permitidos: ADMIN, TRABAJADOR
+    
     Request:
     {
         "body": {

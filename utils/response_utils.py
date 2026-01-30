@@ -306,3 +306,40 @@ def extract_user_from_jwt_claims(event):
     except Exception as e:
         logger.error(f"Error extracting user from JWT: {e}")
         return None
+
+def verificar_rol_permitido(event, roles_permitidos):
+    """
+    Verifica si el usuario tiene uno de los roles permitidos para el endpoint
+    
+    Args:
+        event (dict): Evento de Lambda con requestContext
+        roles_permitidos (list): Lista de roles permitidos (ej: ['ADMIN'], ['TRABAJADOR', 'ADMIN'])
+        
+    Returns:
+        tuple: (bool, dict|None) - (tiene_permiso, error_response|None)
+        
+    Ejemplo:
+        tiene_permiso, error = verificar_rol_permitido(event, ['ADMIN'])
+        if not tiene_permiso:
+            return error
+    """
+    try:
+        user_info = extract_user_from_jwt_claims(event)
+        
+        if not user_info or not user_info.get('rol'):
+            return False, error_response("No autorizado - información de usuario inválida", 401)
+        
+        rol_usuario = user_info.get('rol', '').upper()
+        
+        # Normalizar roles permitidos a mayúsculas
+        roles_normalizados = [r.upper() for r in roles_permitidos]
+        
+        if rol_usuario not in roles_normalizados:
+            roles_str = ', '.join(roles_permitidos)
+            return False, forbidden_response(f"Acceso denegado. Roles permitidos: {roles_str}")
+        
+        return True, None
+        
+    except Exception as e:
+        logger.error(f"Error verificando rol: {e}")
+        return False, error_response("Error verificando permisos", 500)

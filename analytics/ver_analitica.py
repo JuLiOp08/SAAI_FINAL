@@ -6,6 +6,7 @@ from utils import (
     success_response,
     error_response,
     extract_tenant_from_jwt_claims,
+    verificar_rol_permitido,
     obtener_fecha_hora_peru,
     get_item_standard,
     query_by_tenant
@@ -43,6 +44,11 @@ def handler(event, context):
     }
     """
     try:
+        # Verificar rol ADMIN
+        tiene_permiso, error = verificar_rol_permitido(event, ['ADMIN'])
+        if not tiene_permiso:
+            return error
+        
         # JWT validation + tenant
         tenant_id = extract_tenant_from_jwt_claims(event)
         if not tenant_id:

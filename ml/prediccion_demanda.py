@@ -41,6 +41,7 @@ from utils import (
     parse_request_body,
     extract_tenant_from_jwt_claims,
     extract_user_from_jwt_claims,
+    verificar_rol_permitido,
     get_item_standard,
     put_item_standard,
     obtener_solo_fecha_peru,
@@ -71,7 +72,12 @@ def handler(event, context):
         }
     """
     try:
-        # 1. Extraer datos de la request
+        # 1. Verificar rol ADMIN
+        tiene_permiso, error = verificar_rol_permitido(event, ['ADMIN'])
+        if not tiene_permiso:
+            return error
+        
+        # 2. Extraer datos de la request
         tenant_id = extract_tenant_from_jwt_claims(event)
         body = parse_request_body(event)
         
