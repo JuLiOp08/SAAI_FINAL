@@ -125,6 +125,7 @@ def handler(event, context):
             },
             "productos_top": [],
             "ventas_diarias": generar_ventas_diarias_vacias(fecha_inicio, fecha_calc),
+            "gastos_diarios": generar_gastos_diarios_vacios(fecha_inicio, fecha_calc),
             "ventas_por_trabajador": [],
             "alertas_detectadas": [
                 {
@@ -155,3 +156,18 @@ def generar_ventas_diarias_vacias(fecha_inicio, fecha_fin):
         fecha_actual += timedelta(days=1)
     
     return ventas_diarias
+
+def generar_gastos_diarios_vacios(fecha_inicio, fecha_fin):
+    """Genera estructura de gastos diarios vacía para el período"""
+    gastos_diarios = []
+    fecha_actual = fecha_inicio
+    
+    while fecha_actual <= fecha_fin:
+        gastos_diarios.append({
+            'fecha': fecha_actual.strftime('%Y-%m-%d'),
+            'cantidad': 0,
+            'egresos': 0.0
+        })
+        fecha_actual += timedelta(days=1)
+    
+    return gastos_diarios

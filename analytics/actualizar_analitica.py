@@ -138,29 +138,32 @@ def handler(event, context):
                 # 2. GASTOS del período
                 gastos_periodo = calcular_gastos_periodo(tenant_id, fecha_inicio, fecha_fin)
                 
-                # 3. Calcular BALANCE (ingresos - egresos)
+                # 3. GASTOS DIARIOS del período
+                gastos_diarios = calcular_gastos_diarios(tenant_id, fecha_inicio, fecha_fin)
+                
+                # 4. Calcular BALANCE (ingresos - egresos)
                 balance = ventas_periodo['total_ingresos'] - gastos_periodo['total_egresos']
                 gastos_periodo['balance'] = round(balance, 2)
                 
-                # 4. INVENTARIO actual (solo para dia y semana, no mes para optimizar)
+                # 5. INVENTARIO actual (solo para dia y semana, no mes para optimizar)
                 if periodo_nombre in ['dia', 'semana']:
                     inventario_actual = calcular_inventario_actual(tenant_id)
                 else:
                     inventario_actual = {"total_productos": 0, "productos_sin_stock": 0, "productos_bajo_stock": 0, "valor_total": 0.0}
                 
-                # 5. USUARIOS de la tienda (solo para semana, no repetir)
+                # 6. USUARIOS de la tienda (solo para semana, no repetir)
                 if periodo_nombre == 'semana':
                     usuarios_tienda = calcular_usuarios_tienda(tenant_id)
                 else:
                     usuarios_tienda = {"administradores": 0, "trabajadores": 0}
                 
-                # 6. PRODUCTOS TOP (más vendidos del período)
+                # 7. PRODUCTOS TOP (más vendidos del período)
                 productos_top = calcular_productos_top(tenant_id, fecha_inicio, fecha_fin)
                 
-                # 7. VENTAS DIARIAS del período
+                # 8. VENTAS DIARIAS del período
                 ventas_diarias = calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin)
                 
-                # 8. VENTAS POR TRABAJADOR del período
+                # 9. VENTAS POR TRABAJADOR del período
                 ventas_por_trabajador = calcular_ventas_por_trabajador(tenant_id, fecha_inicio, fecha_fin)
                 
                 # Construir resultado analítico (convertir floats a Decimal)
@@ -177,6 +180,7 @@ def handler(event, context):
                     "usuarios": usuarios_tienda,
                     "productos_top": productos_top,
                     "ventas_diarias": [convert_floats_to_decimal(v) for v in ventas_diarias],
+                    "gastos_diarios": [convert_floats_to_decimal(g) for g in gastos_diarios],
                     "ventas_por_trabajador": [convert_floats_to_decimal(v) for v in ventas_por_trabajador],
                     "alertas_detectadas": [],
                     "updated_at": obtener_fecha_hora_peru()
@@ -566,6 +570,60 @@ def calcular_ventas_diarias(tenant_id, fecha_inicio, fecha_fin):
         
     except Exception as e:
         logger.error(f"Error calculando ventas diarias: {str(e)}")
+        return []
+
+def calcular_gastos_diarios(tenant_id, fecha_inicio, fecha_fin):
+    """Calcula gastos por día del período usando utils"""
+    try:
+        from boto3.dynamodb.conditions import Attr
+        
+        # Query gastos del período usando utils (estado ACTIVO)
+        filter_expression = (
+            Attr('data.fecha').between(
+                fecha_inicio.strftime('%Y-%m-%d'), 
+                fecha_fin.strftime('%Y-%m-%d')
+            ) & Attr('data.estado').eq('ACTIVO')
+        )
+        
+        result = query_by_tenant(
+            table_name=os.environ['GASTOS_TABLE'],
+            tenant_id=tenant_id,
+            filter_expression=filter_expression
+        )
+        
+        gastos = result.get('items', [])
+        gastos_por_dia = {}
+        
+        # Agrupar gastos por día
+        for gasto in gastos:
+            fecha_gasto = gasto.get('fecha', '')[:10]  # YYYY-MM-DD
+            monto = float(gasto.get('monto', 0))
+            
+            if fecha_gasto not in gastos_por_dia:
+                gastos_por_dia[fecha_gasto] = {'cantidad': 0, 'egresos': 0}
+            
+            gastos_por_dia[fecha_gasto]['cantidad'] += 1
+            gastos_por_dia[fecha_gasto]['egresos'] += monto
+        
+        # Convertir a lista ordenada
+        gastos_diarios = []
+        fecha_actual = fecha_inicio
+        while fecha_actual <= fecha_fin:
+            fecha_str = fecha_actual.strftime('%Y-%m-%d')
+            dia_data = gastos_por_dia.get(fecha_str, {'cantidad': 0, 'egresos': 0})
+            
+            gastos_diarios.append({
+                'fecha': fecha_str,
+                'cantidad': dia_data['cantidad'],
+                'egresos': round(dia_data['egresos'], 2)
+            })
+            
+            fecha_actual += timedelta(days=1)
+        
+        return gastos_diarios
+        
+    except Exception as e:
+        logger.error(f"Error calculando gastos diarios: {str(e)}")
         return []
 
 def calcular_ventas_por_trabajador(tenant_id, fecha_inicio, fecha_fin):
