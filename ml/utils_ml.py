@@ -276,3 +276,107 @@ def invocar_emitir_eventos_ws(evento):
     except Exception as e:
         print(f"Error invocando EmitirEventosWs: {str(e)}")
         # No fallar si WebSocket falla (no crítico)
+  
+  
+ 
+# =============================================================================  
+# PREDICCIONES BATCH - FUNCIONES COMPARTIDAS  
+# ============================================================================= 
+def calcular_prediccion_simple(ventas_historicas, dias_forecast=7):
+    """
+    Weighted Average con decaimiento exponencial y ajuste estacionalidad
+    
+    Args:
+        ventas_historicas: list[dict] con keys 'cantidad_vendida' y 'fecha_venta'
+        dias_forecast: días a predecir (default 7)
+    
+    Returns:
+        dict con:
+            - demanda_manana (int)
+            - demanda_proxima_semana (int)
+            - confianza (float 0-1)
+            - metodo (str: 'WEIGHTED_AVERAGE')
+    
+    Raises:
+        ValueError: Si ventas_historicas vacío o mal formado
+    """
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+    
+    # Validaciones
+    if not ventas_historicas:
+        raise ValueError("ventas_historicas no puede estar vacío")
+    
+    if not all('cantidad_vendida' in v and 'fecha_venta' in v for v in ventas_historicas):
+        raise ValueError("ventas_historicas debe contener 'cantidad_vendida' y 'fecha_venta'")
+    
+    # Ordenar por fecha DESC (más reciente primero para pesos)
+    ventas_ordenadas = sorted(
+        ventas_historicas,
+        key=lambda x: datetime.fromisoformat(x['fecha_venta'].replace('Z', '+00:00')),
+        reverse=True
+    )
+    
+    # 1. DEMANDA BASE con decaimiento exponencial
+    pesos = [0.9 ** i for i in range(len(ventas_ordenadas))]
+    suma_ponderada = sum(v['cantidad_vendida'] * w for v, w in zip(ventas_ordenadas, pesos))
+    suma_pesos = sum(pesos)
+    
+    demanda_base = suma_ponderada / suma_pesos if suma_pesos > 0 else 0
+    
+    # 2. ESTACIONALIDAD por día de semana
+    ventas_por_dia = defaultdict(list)
+    for venta in ventas_ordenadas:
+        fecha = datetime.fromisoformat(venta['fecha_venta'].replace('Z', '+00:00'))
+        dia_semana = fecha.weekday()  # 0=Lunes, 6=Domingo
+        ventas_por_dia[dia_semana].append(venta['cantidad_vendida'])
+    
+    # Factor estacionalidad: promedio_dia / demanda_base
+    factor_dia = {}
+    for dia in range(7):
+        if dia in ventas_por_dia and ventas_por_dia[dia]:
+            promedio_dia = sum(ventas_por_dia[dia]) / len(ventas_por_dia[dia])
+            factor_dia[dia] = promedio_dia / demanda_base if demanda_base > 0 else 1.0
+        else:
+            factor_dia[dia] = 1.0  # Sin datos, asumir promedio
+    
+    # 3. PREDICCIÓN con ajuste estacionalidad
+    fecha_manana = datetime.now() + timedelta(days=1)
+    dia_manana = fecha_manana.weekday()
+    demanda_manana = demanda_base * factor_dia[dia_manana]
+    
+    demanda_semana = 0
+    for i in range(1, 8):
+        fecha_futura = datetime.now() + timedelta(days=i)
+        dia_futuro = fecha_futura.weekday()
+        demanda_semana += demanda_base * factor_dia[dia_futuro]
+    
+    # 4. CONFIANZA proporcional a datos
+    confianza = min(len(ventas_ordenadas) / 30, 1.0)
+    
+    return {
+        'demanda_manana': max(0, int(round(demanda_manana))),
+        'demanda_proxima_semana': max(0, int(round(demanda_semana))),
+        'confianza': round(confianza, 2),
+        'metodo': 'WEIGHTED_AVERAGE'
+    }
+
+
+def calcular_alerta(stock_actual, demanda_manana, demanda_semana):
+    """
+    Calcula alerta según stock vs demanda
+    
+    Args:
+        stock_actual (int): Stock disponible actual
+        demanda_manana (int): Demanda predicha para mañana
+        demanda_semana (int): Demanda predicha para próxima semana
+    
+    Returns:
+        str: 'STOCK_CRITICO_MANANA' | 'STOCK_BAJO_SEMANA' | 'STOCK_SUFICIENTE'
+    """
+    if stock_actual < demanda_manana:
+        return 'STOCK_CRITICO_MANANA'
+    elif stock_actual < demanda_semana:
+        return 'STOCK_BAJO_SEMANA'
+    else:
+        return 'STOCK_SUFICIENTE'

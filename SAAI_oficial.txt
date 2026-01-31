@@ -1287,14 +1287,26 @@ Response:
 PREDICCIONES (ML)
 ==================================================
 
-Lambda: PrediccionDemanda
-Método: POST
+NOTA IMPORTANTE:
+Las predicciones se generan automáticamente cada 24 horas (2:00 AM) mediante
+GenerarPrediccionesMasivas. El admin solo consulta predicciones ya calculadas
+mediante ListarPredicciones.
+
+------------------------------------
+
+Lambda: ListarPredicciones
+Método: GET
 Path: /predicciones
+
+Descripción:
+Lista todas las predicciones de demanda de la tienda.
+Las predicciones se generan automáticamente cada 24h (2:00 AM).
 
 Request:
 {
-  "body": {
-    "codigo_producto": "T002P001"
+  "queryStringParameters": {
+    "limit": 50,
+    "next_token": "..." (opcional)
   }
 }
 
@@ -1302,9 +1314,90 @@ Response:
 {
   "success": true,
   "data": {
-    "codigo_producto": "T002P001",
-    "demanda_manana": 5,
-    "demanda_proxima_semana": 35
+    "predicciones": [
+      {
+        "codigo_producto": "T002P001",
+        "nombre_producto": "Coca Cola 500ml",
+        "demanda_manana": 5,
+        "demanda_proxima_semana": 35,
+        "stock_actual": 10,
+        "metodo": "HOLT_WINTERS",
+        "confianza": 0.95,
+        "alerta": "STOCK_SUFICIENTE",
+        "fecha_prediccion": "2025-11-08T02:00:00-05:00"
+      },
+      {
+        "codigo_producto": "T002P002",
+        "nombre_producto": "Inca Kola 500ml",
+        "demanda_manana": 3,
+        "demanda_proxima_semana": 21,
+        "stock_actual": 2,
+        "metodo": "WEIGHTED_AVERAGE",
+        "confianza": 0.65,
+        "alerta": "STOCK_BAJO_MANANA",
+        "fecha_prediccion": "2025-11-08T02:00:00-05:00"
+      }
+    ],
+    "resumen": {
+      "total_productos": 150,
+      "productos_con_ia": 120,
+      "productos_con_formula": 30,
+      "productos_alerta_critica": 5,
+      "productos_alerta_moderada": 12
+    },
+    "next_token": "base64_token"
+  }
+}
+
+------------------------------------
+
+Lambda: BuscarPredicciones
+Método: POST
+Path: /predicciones/buscar
+
+Descripción:
+Busca y filtra predicciones según criterios específicos.
+Útil para encontrar productos con alertas, por categoría, rango de stock, etc.
+
+Request:
+{
+  "body": {
+    "filtros": {
+      "codigo_producto": "T002P001" (opcional),
+      "categoria_id": "CAT001" (opcional),
+      "alerta": "STOCK_BAJO_MANANA" (opcional: STOCK_SUFICIENTE, STOCK_BAJO_MANANA, STOCK_CRITICO_SEMANA),
+      "metodo": "HOLT_WINTERS" (opcional: HOLT_WINTERS, WEIGHTED_AVERAGE),
+      "stock_minimo": 5 (opcional),
+      "stock_maximo": 50 (opcional),
+      "demanda_minima": 10 (opcional)
+    },
+    "ordenar_por": "demanda_manana" (opcional: demanda_manana, demanda_proxima_semana, confianza, stock_actual),
+    "orden": "desc" (opcional: asc, desc),
+    "limit": 50 (opcional, default: 50),
+    "next_token": "..." (opcional)
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "predicciones": [
+      {
+        "codigo_producto": "T002P001",
+        "nombre_producto": "Coca Cola 500ml",
+        "categoria": "Bebidas",
+        "demanda_manana": 5,
+        "demanda_proxima_semana": 35,
+        "stock_actual": 2,
+        "metodo": "HOLT_WINTERS",
+        "confianza": 0.95,
+        "alerta": "STOCK_BAJO_MANANA",
+        "fecha_prediccion": "2025-11-08T02:00:00-05:00"
+      }
+    ],
+    "total_resultados": 15,
+    "next_token": "base64_token"
   }
 }
 
@@ -1730,13 +1823,13 @@ Flujo:
 PIPELINE ENTRENAMIENTO (AUTOMÁTICO CADA 3 DÍAS)
 ====================================
 
-Lambda: EntrenarModelos (Docker Lambda Container)
+Lambda: EntrenarModelos (Docker Lambda Container) - SIN CAMBIOS
 Ruta: Interna (EventBridge Scheduler cada 3 días)
 
 Descripción:
 Entrena modelos Holt-Winters para todos los productos activos de todas las tiendas.
-Cada producto genera un modelo individual (.pkl) que se guarda en S3.
-Usa datos históricos de ventas para ajustar parámetros (alpha, beta, gamma).
+Cada producto con >=30 ventas genera un modelo individual (.pkl) que se guarda en S3.
+Los productos con <30 ventas NO generan modelo (usarán Weighted Average en GenerarPrediccionesMasivas).
 
 Tablas:
 - (lectura) t_tiendas (lista de tiendas activas para procesar)
@@ -1753,26 +1846,23 @@ Servicios:
 Proceso de entrenamiento:
 1. Itera por cada tienda activa
 2. Para cada producto activo en la tienda:
-   a. Consulta historial de ventas (últimos 90 días mínimo)
+   a. Consulta historial de ventas (últimos 90 días)
    b. Valida datos suficientes (mínimo 30 registros)
-   c. Prepara features: cantidad_vendida, dia_semana, es_fin_semana, es_feriado
-   d. Entrena modelo Holt-Winters con statsmodels.ExponentialSmoothing
-   e. Serializa modelo con joblib.dump()
-   f. Guarda .pkl en S3: saai-tiendas/{tenant_id}/modelos/{codigo_producto}.pkl
+   c. Si registros >= 30:
+      - Prepara dataset para Holt-Winters
+      - Entrena modelo con statsmodels.ExponentialSmoothing
+      - Serializa modelo con joblib.dump()
+      - Guarda .pkl en S3: saai-tiendas/{tenant_id}/modelos/{codigo_producto}.pkl
+   d. Si registros < 30:
+      - SKIP (no genera modelo, usará Weighted Average en predicción)
 3. Emite evento WebSocket global al finalizar
-4. Retorna estadísticas: total_modelos_entrenados, total_errores
-
-Manejo de features:
-- dia_semana: calculado dinámicamente con datetime.weekday() (0=Lunes, 6=Domingo)
-- es_fin_semana: 1 si dia_semana >= 5, else 0
-- es_feriado: calculado con librería holidays.Peru() (actualizada cada año)
-- promedio_7d: calculado desde ventas históricas
+4. Retorna estadísticas: total_modelos_entrenados, productos_omitidos, total_errores
 
 Notas:
 - Timeout: 300 segundos (5 minutos)
 - Memory: 1024 MB
 - Costo aproximado: $0.03/mes para 1000 modelos
-- NO se usa GeneraDataset separado (todo en una Lambda)
+- NO REQUIERE CAMBIOS (mantener código actual)
 
 
 

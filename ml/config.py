@@ -65,3 +65,14 @@ ALERTA_ENTRENAMIENTO_ERROR = 'entrenamientoErrores'
 
 EVENTO_WS_MODELOS_ACTUALIZADOS = 'modelos_actualizados'
 EVENTO_WS_PREDICCION_GENERADA = 'prediccion_generada'
+
+# ============================================
+# PREDICCIONES MASIVAS (BATCH)
+# ============================================
+
+PREDICCIONES_TTL_HORAS = 36
+MIN_VENTAS_HOLT_WINTERS = 30  # >= 30 ventas → IA, < 30 → Fórmula
+EVENTBRIDGE_CRON_PREDICCIONES_UTC = "cron(0 7 * * ? *)"  # 02:00 AM Lima (UTC-5)
+
+# SQS
+PREDICCIONES_QUEUE_NAME = 'saai-predicciones-queue'

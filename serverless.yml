@@ -567,21 +567,65 @@ functions:
           rate: rate(3 days)
           enabled: true
 
-  PrediccionDemanda:
+  # =================================================================
+  # PREDICCIONES BATCH - ARQUITECTURA SQS
+  # =================================================================
+  
+  OrquestarPrediccionesDiarias:
+    handler: ml.orquestar_predicciones_diarias.handler
+    description: Orquestador - lista tiendas y encola en SQS
+    timeout: 60
+    memorySize: 256
+    environment:
+      PREDICCIONES_QUEUE_URL:
+        Ref: PrediccionesSQSQueue
+    events:
+      - schedule:
+          name: ${self:service}-${self:provider.stage}-PrediccionesDiarias
+          description: "Genera predicciones diarias a las 2:00 AM Lima (7:00 UTC)"
+          rate: cron(0 7 * * ? *)
+          enabled: true
+
+  GenerarPrediccionesPorTienda:
     image:
       name: ml-image
       command:
-        - prediccion_demanda.handler
-    description: Predice demanda de productos usando Holt-Winters
-    timeout: 29
-    memorySize: 512
+        - generar_predicciones_por_tienda.handler
+    description: Worker - procesa 1 tienda desde SQS
+    timeout: 900  # 15 minutos
+    memorySize: 2048
     environment:
       ALERTAS_SNS_TOPIC_ARN:
         Ref: AlertasSaaiTopic
       EMITIR_EVENTOS_WS_FUNCTION_NAME: "${self:service}-${self:provider.stage}-EmitirEventosWs"
     events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - PrediccionesSQSQueue
+              - Arn
+          batchSize: 1  # 1 mensaje = 1 tienda por ejecución
+
+  ListarPredicciones:
+    handler: ml.listar_predicciones.handler
+    description: GET /predicciones - lista predicciones con paginación
+    timeout: 30
+    memorySize: 512
+    events:
       - http:
           path: /predicciones
+          method: get
+          cors: true
+          authorizer: authorizer
+
+  BuscarPredicciones:
+    handler: ml.buscar_predicciones.handler
+    description: POST /predicciones/buscar - busca con filtros
+    timeout: 30
+    memorySize: 512
+    events:
+      - http:
+          path: /predicciones/buscar
           method: post
           cors: true
           authorizer: authorizer
@@ -854,6 +898,29 @@ resources:
       Properties:
         TopicName: BienvenidaSAAI-${self:provider.stage}
         DisplayName: "SAAI - Bienvenida Nuevas Tiendas"
+
+    # =================================================================
+    # SQS QUEUE - PREDICCIONES MASIVAS
+    # =================================================================
+    PrediccionesSQSQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${self:provider.stage}-predicciones-queue
+        VisibilityTimeout: 900  # 15 minutos (timeout de worker)
+        MessageRetentionPeriod: 86400  # 24 horas
+        ReceiveMessageWaitTimeSeconds: 20  # Long polling
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - PrediccionesDLQ
+              - Arn
+          maxReceiveCount: 3  # 3 intentos antes de DLQ
+
+    PrediccionesDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${self:provider.stage}-predicciones-dlq
+        MessageRetentionPeriod: 1209600  # 14 días
 
     # =================================================================
     # S3 BUCKET
